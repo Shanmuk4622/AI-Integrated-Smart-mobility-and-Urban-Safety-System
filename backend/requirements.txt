@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+numpy
+opencv-python
+ultralytics
+filterpy
+scipy
+easyocr
+python-multipart
+websockets
