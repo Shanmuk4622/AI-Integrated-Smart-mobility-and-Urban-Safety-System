@@ -4,17 +4,25 @@ import cv2
 import numpy as np
 import json
 
-# Add backend to path to import modules
+# Add backend to path (Go up one level from scripts/)
 sys.path.append(os.path.join(os.getcwd(), 'backend'))
+# Also try adding root for module resolution
+sys.path.append(os.path.dirname(os.getcwd()))
 
-from app.core.ai_pipeline import SmartMobilitySystem
+try:
+    from backend.app.core.ai_pipeline import SmartMobilitySystem
+except ImportError:
+     # try relative if running from root
+     sys.path.append(os.getcwd())
+     from backend.app.core.ai_pipeline import SmartMobilitySystem
 
-# Define paths (Relative to where we run this script)
-BASE_DIR = os.getcwd()
-EXTERNAL_DIR = os.path.join(BASE_DIR, "Automatic-License-Plate-Recognition-using-YOLOv8")
-VIDEO_PATH = os.path.join(EXTERNAL_DIR, "Videos", "sample2.mp4")
-COCO_MODEL = os.path.join(EXTERNAL_DIR, "yolov8n.pt")
-LP_MODEL = os.path.join(EXTERNAL_DIR, "license_plate_detector.pt")
+# Define paths
+# We are in /scripts or root. 
+BASE_DIR = os.path.dirname(os.getcwd()) if os.getcwd().endswith("scripts") else os.getcwd()
+ASSETS_DIR = os.path.join(BASE_DIR, "backend", "assets")
+VIDEO_PATH = os.path.join(ASSETS_DIR, "Videos", "sample2.mp4")
+COCO_MODEL = os.path.join(ASSETS_DIR, "yolov8n.pt")
+LP_MODEL = os.path.join(ASSETS_DIR, "license_plate_detector.pt")
 
 def main():
     print("--- Starting Local Smart Mobility Demo ---")

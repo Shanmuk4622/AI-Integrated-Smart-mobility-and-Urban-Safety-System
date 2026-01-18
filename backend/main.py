@@ -21,15 +21,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Paths to models (assuming running from backend folder)
-# We need to go up one level to find the models in the other folder
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXTERNAL_DIR = os.path.join(BASE_DIR, "Automatic-License-Plate-Recognition-using-YOLOv8")
-VIDEO_PATH = os.path.join(EXTERNAL_DIR, "Videos", "sample2.mp4")
-COCO_MODEL = os.path.join(EXTERNAL_DIR, "yolov8n.pt")
-LP_MODEL = os.path.join(EXTERNAL_DIR, "license_plate_detector.pt")
+# Paths to models
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+VIDEO_PATH = os.path.join(ASSETS_DIR, "Videos", "sample2.mp4")
+COCO_MODEL = os.path.join(ASSETS_DIR, "yolov8n.pt")
+LP_MODEL = os.path.join(ASSETS_DIR, "license_plate_detector.pt")
 
-print(f"Loading models from: {EXTERNAL_DIR}")
+print(f"Loading models from: {ASSETS_DIR}")
 
 @app.get("/")
 def read_root():
