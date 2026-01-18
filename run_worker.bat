@@ -14,6 +14,13 @@ echo [INFO] Checking Dependencies...
 pip install -r worker\requirements.txt
 
 echo.
+echo [INFO] Clearing Python cache...
+if exist "worker\__pycache__" rmdir /s /q "worker\__pycache__"
+if exist "worker\core\__pycache__" rmdir /s /q "worker\core\__pycache__"
+if exist "worker\services\__pycache__" rmdir /s /q "worker\services\__pycache__"
+if exist "worker\sort\__pycache__" rmdir /s /q "worker\sort\__pycache__"
+
+echo.
 echo [INFO] Starting Worker...
 python worker\main.py %*
 

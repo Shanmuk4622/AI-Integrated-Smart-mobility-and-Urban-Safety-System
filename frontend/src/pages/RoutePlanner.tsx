@@ -42,12 +42,87 @@ interface Junction {
     status: string;
 }
 
-// --- Constants (Moved outside to prevent re-creation) ---
-const CENTER_NODE = L.latLng(51.505, -0.09); // "The Junction"
+interface JunctionWithCongestion extends Junction {
+    congestion_level?: string;
+    vehicle_count?: number;
+}
+
+// Detour node for rerouting (can be calculated dynamically in future)
 const DETOUR_NODE = L.latLng(51.5115, -0.1044); // Blackfriars Bridge (North Bank)
 
+// --- Utility Functions for Route-Junction Proximity Detection ---
+const getDistanceToSegment = (point: L.LatLng, lineStart: L.LatLng, lineEnd: L.LatLng): number => {
+    const x = point.lat;
+    const y = point.lng;
+    const x1 = lineStart.lat;
+    const y1 = lineStart.lng;
+    const x2 = lineEnd.lat;
+    const y2 = lineEnd.lng;
+
+    const A = x - x1;
+    const B = y - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+
+    if (lenSq !== 0) {
+        param = dot / lenSq;
+    }
+
+    let xx, yy;
+
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    const dx = x - xx;
+    const dy = y - yy;
+
+    // Convert to meters (approximate: 1 degree ≈ 111.32 km)
+    const distanceInDegrees = Math.sqrt(dx * dx + dy * dy);
+    return distanceInDegrees * 111320;
+};
+
+const isJunctionInRoutePath = (
+    junction: JunctionWithCongestion,
+    routeCoords: L.LatLng[],
+    thresholdMeters: number = 500
+): boolean => {
+    if (!junction.latitude || !junction.longitude || routeCoords.length === 0) {
+        return false;
+    }
+
+    const junctionPoint = L.latLng(junction.latitude, junction.longitude);
+
+    // Check if junction is within threshold distance of any route segment
+    for (let i = 0; i < routeCoords.length - 1; i++) {
+        const distance = getDistanceToSegment(junctionPoint, routeCoords[i], routeCoords[i + 1]);
+
+        if (distance <= thresholdMeters) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
 // --- Routing Control Component (Memoized) ---
-const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: L.LatLng, avoidPoint: L.LatLng | null }) => {
+const Routing = React.memo(({ start, end, avoidPoint, onRouteCalculated }: {
+    start: L.LatLng,
+    end: L.LatLng,
+    avoidPoint: L.LatLng | null,
+    onRouteCalculated?: (coordinates: L.LatLng[]) => void
+}) => {
     const map = useMap();
     const routingControlRef = useRef<any>(null);
     const labelMarkersRef = useRef<L.Marker[]>([]); // Track label markers
@@ -113,6 +188,13 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
             labelMarkersRef.current = [];
 
             const routes = e.routes;
+
+            // Extract and pass primary route coordinates to parent component
+            if (routes.length > 0 && onRouteCalculated) {
+                const primaryRoute = routes[0];
+                onRouteCalculated(primaryRoute.coordinates);
+            }
+
             routes.forEach((route: any) => {
                 const summary = route.summary;
                 if (!summary) return;
@@ -175,6 +257,12 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
 export default function RoutePlanner() {
     const [stats, setStats] = useState<StreamStats | null>(null);
     const [junctions, setJunctions] = useState<Junction[]>([]);
+    const [selectedJunction, setSelectedJunction] = useState<Junction | null>(null);
+
+    // New state for intelligent routing
+    const [junctionsWithCongestion, setJunctionsWithCongestion] = useState<JunctionWithCongestion[]>([]);
+    const [routeCoordinates, setRouteCoordinates] = useState<L.LatLng[]>([]);
+    const [congestedJunctionsInPath, setCongestedJunctionsInPath] = useState<JunctionWithCongestion[]>([]);
 
     // State for Dynamic Points
     const [startPoint, setStartPoint] = useState<L.LatLng>(L.latLng(51.500, -0.10));
@@ -185,8 +273,10 @@ export default function RoutePlanner() {
     const [endQuery, setEndQuery] = useState("Tower of London");
 
     useEffect(() => {
-        // Subscribe to changes in traffic logs for Junction 1 (System Default for this demo)
-        const junctionId = 1;
+        // Subscribe to changes in traffic logs for the SELECTED junction
+        if (!selectedJunction) return;
+
+        const junctionId = selectedJunction.id;
 
         // Fetch initial state
         const fetchInitial = async () => {
@@ -228,20 +318,60 @@ export default function RoutePlanner() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [selectedJunction]);
 
-    // Fetch junctions from database
+    // Fetch junctions with congestion data from database
     useEffect(() => {
-        const fetchJunctions = async () => {
-            const { data, error } = await supabase.from('junctions').select('*').order('id');
-            if (error) {
-                console.error('Error fetching junctions:', error);
-            } else if (data) {
-                setJunctions(data);
+        const fetchJunctionsWithCongestion = async () => {
+            // Fetch all junctions
+            const { data: junctionsData, error: junctionsError } = await supabase
+                .from('junctions')
+                .select('*')
+                .order('id');
+
+            if (junctionsError) {
+                console.error('Error fetching junctions:', junctionsError);
+                return;
             }
+
+            if (!junctionsData) return;
+
+            // Fetch latest traffic log for each junction
+            const junctionsWithCongestionData = await Promise.all(
+                junctionsData.map(async (junction) => {
+                    const { data: trafficLog } = await supabase
+                        .from('traffic_logs')
+                        .select('congestion_level, vehicle_count')
+                        .eq('junction_id', junction.id)
+                        .order('timestamp', { ascending: false })
+                        .limit(1)
+                        .single();
+
+                    return {
+                        ...junction,
+                        congestion_level: trafficLog?.congestion_level || 'Low',
+                        vehicle_count: trafficLog?.vehicle_count || 0
+                    };
+                })
+            );
+
+            setJunctions(junctionsData);
+            setJunctionsWithCongestion(junctionsWithCongestionData);
         };
 
-        fetchJunctions();
+        fetchJunctionsWithCongestion();
+
+        // Subscribe to traffic log updates for ALL junctions
+        const trafficChannel = supabase
+            .channel('route-planner-all-traffic')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'traffic_logs' },
+                () => {
+                    fetchJunctionsWithCongestion(); // Reload when any traffic log updates
+                }
+            )
+            .subscribe();
 
         // Subscribe to junction updates
         const junctionChannel = supabase
@@ -250,18 +380,49 @@ export default function RoutePlanner() {
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'junctions' },
                 () => {
-                    fetchJunctions(); // Reload when junctions change
+                    fetchJunctionsWithCongestion(); // Reload when junctions change
                 }
             )
             .subscribe();
 
         return () => {
+            supabase.removeChannel(trafficChannel);
             supabase.removeChannel(junctionChannel);
         };
     }, []);
 
-    const isCongested = stats ? (stats.density > 10 || stats.ambulance) : false;
-    const avoidNode = isCongested ? CENTER_NODE : null;
+    // Auto-select first active junction when junctions load
+    useEffect(() => {
+        if (junctions.length > 0 && !selectedJunction) {
+            const activeJunction = junctions.find(j => j.status === 'active' && j.latitude && j.longitude);
+            setSelectedJunction(activeJunction || junctions[0]);
+        }
+    }, [junctions, selectedJunction]);
+
+    // Detect congested junctions in the route path
+    useEffect(() => {
+        if (routeCoordinates.length === 0 || junctionsWithCongestion.length === 0) {
+            setCongestedJunctionsInPath([]);
+            return;
+        }
+
+        const congestedInPath = junctionsWithCongestion.filter(junction => {
+            const isHighCongestion = junction.congestion_level === 'High';
+            const isInPath = isJunctionInRoutePath(junction, routeCoordinates, 500); // 500m threshold
+
+            return isHighCongestion && isInPath;
+        });
+
+        setCongestedJunctionsInPath(congestedInPath);
+    }, [routeCoordinates, junctionsWithCongestion]);
+
+
+    // Intelligent rerouting: only reroute if high-congestion junctions are IN the route path
+    const shouldReroute = congestedJunctionsInPath.length > 0;
+    const avoidNode = shouldReroute && congestedJunctionsInPath[0]
+        ? L.latLng(congestedJunctionsInPath[0].latitude!, congestedJunctionsInPath[0].longitude!)
+        : null;
+
 
     // --- Geocoding Handlers ---
     const handleStartSelect = (lat: number, lon: number, displayName: string) => {
@@ -314,45 +475,73 @@ export default function RoutePlanner() {
                     Status:
                     <span style={{
                         marginLeft: '5px',
-                        color: isCongested ? '#ff4444' : '#44ff44',
+                        color: shouldReroute ? '#ff4444' : '#44ff44',
                         fontWeight: 'bold'
                     }}>
-                        {isCongested ? "REROUTING (CONGESTED)" : "OPTIMAL"}
+                        {shouldReroute
+                            ? `REROUTING (${congestedJunctionsInPath.length} congested junction${congestedJunctionsInPath.length > 1 ? 's' : ''} in path)`
+                            : "OPTIMAL"}
                     </span>
                 </div>
             </div>
 
             <div style={{ flex: 1, position: 'relative' }}>
-                <MapContainer center={CENTER_NODE} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <MapContainer
+                    center={selectedJunction && selectedJunction.latitude && selectedJunction.longitude
+                        ? [selectedJunction.latitude, selectedJunction.longitude]
+                        : [51.505, -0.09]}
+                    zoom={13}
+                    style={{ height: '100%', width: '100%' }}
+                >
                     <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
 
-                    {/* The Monitored Junction */}
-                    <Circle
-                        center={CENTER_NODE}
-                        radius={300}
-                        pathOptions={{
-                            color: isCongested ? 'red' : 'green',
-                            fillColor: isCongested ? 'red' : 'green',
-                            fillOpacity: 0.2
-                        }}
-                    >
-                        <Popup>Monitored Junction (AI Camera 1)</Popup>
-                    </Circle>
+                    {/* The Monitored Junction - Uses REAL junction from database */}
+                    {selectedJunction && selectedJunction.latitude && selectedJunction.longitude && (
+                        <Circle
+                            center={[selectedJunction.latitude, selectedJunction.longitude]}
+                            radius={300}
+                            pathOptions={{
+                                color: shouldReroute ? 'red' : 'green',
+                                fillColor: shouldReroute ? 'red' : 'green',
+                                fillOpacity: 0.2
+                            }}
+                        >
+                            <Popup>
+                                <strong>{selectedJunction.name}</strong><br />
+                                Status: {shouldReroute ? 'CONGESTED (IN PATH)' : 'NORMAL'}<br />
+                                Vehicles: {stats?.density || 0}
+                            </Popup>
+                        </Circle>
+                    )}
 
                     <Marker position={startPoint}><Popup>Start: {startQuery}</Popup></Marker>
                     <Marker position={endPoint}><Popup>Destination: {endQuery}</Popup></Marker>
 
                     {/* Junction Markers */}
-                    {junctions.map(junction => {
+                    {junctionsWithCongestion.map(junction => {
                         if (!junction.latitude || !junction.longitude) return null;
+
+                        // Determine if this junction is congested and in the route path
+                        const isCongestedInPath = congestedJunctionsInPath.some(cj => cj.id === junction.id);
+                        const isHighCongestion = junction.congestion_level === 'High';
+
+                        // Color coding:
+                        // Red: Congested and in path (causing rerouting)
+                        // Orange: Congested but not in path
+                        // Green: Normal/Low congestion
+                        const markerColor = isCongestedInPath
+                            ? '#ff0000' // Red: Congested and in path
+                            : isHighCongestion
+                                ? '#ff8800' // Orange: Congested but not in path
+                                : junction.status === 'active' ? '#28a745' : '#777'; // Green: Normal
 
                         const junctionIcon = L.divIcon({
                             className: 'custom-icon',
                             html: `<div style="
-                                background-color: ${junction.status === 'active' ? '#28a745' : '#777'};
+                                background-color: ${markerColor};
                                 width: 16px;
                                 height: 16px;
                                 border-radius: 50%;
@@ -371,14 +560,22 @@ export default function RoutePlanner() {
                             >
                                 <Popup>
                                     <strong>{junction.name} (ID: {junction.id})</strong><br />
-                                    Status: {junction.status.toUpperCase()}
+                                    Status: {junction.status.toUpperCase()}<br />
+                                    Congestion: {junction.congestion_level || 'Unknown'}<br />
+                                    Vehicles: {junction.vehicle_count || 0}
+                                    {isCongestedInPath && <><br /><strong style={{ color: 'red' }}>⚠️ IN ROUTE PATH</strong></>}
                                 </Popup>
                             </Marker>
                         );
                     })}
 
                     {/* Routing Logic */}
-                    <Routing start={startPoint} end={endPoint} avoidPoint={avoidNode} />
+                    <Routing
+                        start={startPoint}
+                        end={endPoint}
+                        avoidPoint={avoidNode}
+                        onRouteCalculated={setRouteCoordinates}
+                    />
 
                 </MapContainer>
             </div>

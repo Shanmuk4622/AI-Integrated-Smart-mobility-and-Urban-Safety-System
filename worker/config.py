@@ -5,17 +5,17 @@ import os
 # ==========================================
 
 # 1. Identity
-JUNCTION_ID = 1  # Default ID for this worker
-LOCATION_NAME = "London (Canary Wharf)" # Junction Location Description
+JUNCTION_ID = 2  # Default ID for this worker
+LOCATION_NAME = "Lonndon Bridge" # Junction Location Description
 
 # GEOGRAPHIC COORDINATES (Decimal Degrees)
-LATITUDE = 51.5055
-LONGITUDE = -0.0158
+LATITUDE = 51.507740595542955
+LONGITUDE = -0.08789167536240972
 
 # 2. Input
 # Path to video file OR RTSP Stream URL
 # Example: "rtsp://username:password@ip:port/stream"
-VIDEO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Videos", "sample3.mp4")
+VIDEO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Videos", "sample.mp4")
 
 # 3. Models
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
