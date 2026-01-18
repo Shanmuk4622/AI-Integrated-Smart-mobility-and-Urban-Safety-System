@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import './AdminDashboard.css';
 import { supabase } from '../lib/supabaseClient';
+import RoadMap from '../components/RoadMap';
 
 interface Junction {
     id: number;
     name: string;
-    location: string;
+    latitude: number;
+    longitude: number;
     status: string;
 }
 
@@ -74,9 +76,22 @@ export default function AdminDashboard() {
             )
             .subscribe();
 
+        // 4. Subscribe to Junction Updates (for Status/Location changes)
+        const junctionChannel = supabase
+            .channel('junction-updates')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'junctions' },
+                () => {
+                    fetchJunctions(); // Reload list if status changes
+                }
+            )
+            .subscribe();
+
         return () => {
             supabase.removeChannel(trafficChannel);
             supabase.removeChannel(violationChannel);
+            supabase.removeChannel(junctionChannel);
         };
     }, [selectedJunctionId]);
 
@@ -150,15 +165,12 @@ export default function AdminDashboard() {
                 <div className="content-area" style={{ flex: 1, padding: '1rem' }}>
                     <h2>{selectedJunction?.name || 'Select a Junction'}</h2>
 
-                    <div className="video-section">
-                        <div className="video-wrapper" style={{ background: '#000', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
-                            {/* Placeholder for now as we don't have streaming via Supabase yet */}
-                            <div>
-                                <h3 style={{ color: '#fff' }}>Live Feed: {selectedJunction?.name}</h3>
-                                <p>🎥 Video Worker ID: {selectedJunction?.id}</p>
-                                <p>(Stream visualization via WebSocket pending)</p>
-                            </div>
-                        </div>
+                    <div className="video-section" style={{ height: '400px', marginBottom: '20px' }}>
+                        <RoadMap
+                            junctions={junctions}
+                            activeJunctionId={selectedJunctionId}
+                            onJunctionSelect={setSelectedJunctionId}
+                        />
                     </div>
 
                     <div className="stats-panel">

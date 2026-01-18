@@ -1,63 +1,48 @@
-# Traffic Monitoring Worker
+# Worker Service (Edge Node) - Deep Dive
 
-This is a standalone AI service designed to process video feeds from traffic junctions. It detects vehicles, calculates real-time traffic density, controls signals logic, and logs data to Supabase.
+## 🧠 How It Works
+The Worker Node is an independent AI agent designed to monitor a single traffic junction. It operates in a continuous loop, transforming raw video pixels into actionable traffic data.
 
-## 🚀 Features
-- **Independent Service**: Can be deployed on any machine with a GPU/CPU.
-- **AI Processing**: Uses YOLOv8 for vehicle detection and Custom YOLO for License Plate recognition.
-- **Real-time Tracking**: Implements SORT (Simple Online and Realtime Tracking) algorithm.
-- **Cloud Integration**: Syncs traffic density, violations, and signal status to Supabase.
+### 1. Object Detection (YOLOv8)
+**File**: `core/processor.py`
+Every frame is passed through the **YOLOv8 Nano (yolov8n.pt)** neural network.
+- **Goal**: Identify objects and classify them (Car, Bus, Truck, Motorcycle).
+- **Optimization**: Uses GPU (CUDA) if available, otherwise falls back to CPU.
 
-## 📂 Directory Structure
+### 2. Multi-Object Tracking (SORT)
+**File**: `sort/sort.py`
+Raw detections are stateless (frame-by-frame). To understand flow, we need to know if the car in Frame 1 is the same as the car in Frame 2.
+- **Algorithm**: **SORT (Simple Online and Realtime Tracking)**.
+- **Logic**: It uses Kalman Filters to predict where a car *should* be in the next frame. If a detection matches that prediction (IoU - Intersection over Union), it is assigned the same **Unique ID (Track ID)**.
+- **Benefit**: Allows us to count unique vehicles and calculate lane density over time, rather than just per-frame counts.
+
+### 3. Violation Logic & Rules
+**File**: `core/processor.py` & `core/traffic_rules.py`
+Once we have tracks, we apply spatial rules:
+- **Wrong Way**: We track the vector of movement (History of Y-coordinates). If a vehicle moves *up* (negative Y) in a lane designated for *down* movement, it triggers a violation.
+- **Ambulance Detection**: A secondary check analyzes the color spectrum of large vehicles. If a significant percentage of pixels are "Emergency Red/Orange", it flags an Ambulance, which triggers high-priority signal changes.
+- **Plate Recognition**: Every 5th frame, an **EasyOCR** pass checks relevant bounding boxes for text. To prevent flickering, we use a "Plate Smoother" (`PlateSmoother` class) that keeps the highest-confidence reading for each ID.
+
+### 4. Cloud Synchronization (Supabase)
+**File**: `services/supabase_client.py`
+The worker does not store heavy data locally.
+- **Startup**: It registers itself (Name, Coordinates) in the `junctions` table.
+- **Real-Time**: 
+    - **Traffic Logs**: Pushes aggregated stats (Vehicle Count, Density) every 5 seconds to `traffic_logs`.
+    - **Violations**: Pushes events *immediately* to the `violations` table.
+
+---
+
+## ⚙️ Configuration
+**Everything** is controlled via `worker/config.py`. You do not need to edit code to change settings.
+
+```python
+# worker/config.py
+VIDEO_SOURCE = "Videos/sample3.mp4" # or RTSP URL
+COORDINATES = "40.7128,-74.0060" # Updates the map automatically
 ```
-worker/
-├── assets/         # AI Models (yolov8n.pt, license_plate_detector.pt)
-├── core/           # Core Logic (processor.py, traffic_rules.py)
-├── services/       # Database & Cloud Services
-├── sort/           # Tracking Algorithm
-├── Videos/         # Sample footage for testing
-├── main.py         # Entry point script
-└── requirements.txt # Dependencies
-```
 
-## 🛠️ Setup & Installation
-
-### Prerequisites
-- Python 3.8+
-- CUDA-enabled GPU (Recommended for performance)
-
-### 1. Install Dependencies
-Run the included batch file in the root directory, or manually install:
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configuration
-Ensure a `.env` file exists in the `worker` directory (or is copied from root) with:
-```ini
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_anon_key
-```
-
-## ▶️ How to Run
-
-### Method 1: Automatic (Recommended)
-Use the batch script located in the project root:
-```cmd
-.\run_worker.bat
-```
-This script handles virtual environment activation and dependency checking automatically.
-
-### Method 2: Manual
-```bash
-# Activate your virtual environment first
-python worker/main.py --junction_id 1 --source "worker/Videos/sample2.mp4"
-```
-**Arguments:**
-- `--junction_id`: ID of the junction to monitor (Default: 1).
-- `--source`: Path to video file or RTSP stream URL.
-- `--coco_model`: Path to vehicle detection model.
-- `--lp_model`: Path to license plate model.
-
-## ⚠️ Troubleshooting
-- **RLS Policy Error**: If you see `new row violates row-level security policy`, you need to enable "INSERT" permissions for the `anon` role in your Supabase Dashboard for the `traffic_logs` and `violations` tables.
+## 🚀 Execution Flow
+1. Run `run_worker.bat`.
+2. Python Process starts -> Loads Models -> Connects to Supabase.
+3. Main Loop: `Capture -> YOLO -> SORT -> Rules -> Visualize -> Sync`.

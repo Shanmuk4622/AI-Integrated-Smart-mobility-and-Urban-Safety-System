@@ -21,8 +21,7 @@ from services.supabase_client import SupabaseService
 # SMART MOBILITY SYSTEM (WORKER VERSION)
 # ==========================================
 
-# Initialize EasyOCR
-reader = easyocr.Reader(['en'], gpu=True)
+# EasyOCR will be initialized per-instance to avoid CUDA conflicts
 
 dict_char_to_int = {'O': '0', 'I': '1', 'J': '3', 'A': '4', 'G': '6', 'S': '5'}
 dict_int_to_char = {'0': 'O', '1': 'I', '3': 'J', '4': 'A', '6': 'G', '5': 'S'}
@@ -47,14 +46,7 @@ def format_license(text):
         else: license_plate_ += text[j]
     return license_plate_
 
-def read_license_plate(license_plate_crop):
-    detections = reader.readtext(license_plate_crop)
-    for detection in detections:
-        bbox, text, score = detection
-        text = text.upper().replace(' ', '')
-        if license_complies_format(text):
-            return format_license(text), score
-    return None, None
+
 
 class BoxSmoother:
     def __init__(self, window=30):
@@ -107,6 +99,10 @@ class JunctionProcessor:
         else:
             print("Using CPU")
         
+        # Initialize EasyOCR after YOLO models to prevent CUDA conflicts
+        print("Initializing EasyOCR...")
+        self.reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available())
+        
         # Initialize SORT Tracker
         self.tracker = Sort(max_age=30, min_hits=3, iou_threshold=0.3)
         self.traffic_controller = TrafficController()
@@ -151,7 +147,8 @@ class JunctionProcessor:
             self.db.update_junction_info(
                 junction_id=self.junction_id,
                 name=self.config.LOCATION_NAME,
-                location=self.config.COORDINATES
+                latitude=self.config.LATITUDE,
+                longitude=self.config.LONGITUDE
             )
 
     def detect_ambulance(self, frame, box):
@@ -176,6 +173,16 @@ class JunctionProcessor:
         _, y_new, _, _ = current_pos 
         if y_new < y_old - 50: return True # Violation rule
         return False
+
+    def read_license_plate(self, license_plate_crop):
+        """Read and validate license plate text from cropped image."""
+        detections = self.reader.readtext(license_plate_crop)
+        for detection in detections:
+            bbox, text, score = detection
+            text = text.upper().replace(' ', '')
+            if license_complies_format(text):
+                return format_license(text), score
+        return None, None
 
     def start(self):
         print(f"Junction {self.junction_id}: Processing started.")
@@ -249,7 +256,7 @@ class JunctionProcessor:
                             
                             plate_crop = frame[int(ly1):int(ly2), int(lx1):int(lx2)]
                             if plate_crop.shape[0] > 0 and plate_crop.shape[1] > 0:
-                                p_text, p_score = read_license_plate(plate_crop)
+                                p_text, p_score = self.read_license_plate(plate_crop)
                                 if p_text:
                                     self.plate_smoother.update_text(tid, p_text, p_score)
                 
@@ -360,7 +367,21 @@ class JunctionProcessor:
                         break
         
         # Cleanup
+        self.stop()
+        
+    def stop(self):
+        print("Stopping Worker...")
+        # 1. Update DB Status
+        try:
+            if self.config:
+                self.db.update_status(self.junction_id, "offline")
+        except Exception as e:
+            print(f"Error during shutdown sync: {e}")
+
+        # 2. Release Resources
         if self.out:
             self.out.release()
-        self.cap.release()
+        if self.cap:
+             self.cap.release()
         cv2.destroyAllWindows()
+        print("Worker Stopped Cleanly.")

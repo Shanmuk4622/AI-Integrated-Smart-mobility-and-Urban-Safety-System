@@ -34,6 +34,14 @@ interface StreamStats {
     ambulance: boolean;
 }
 
+interface Junction {
+    id: number;
+    name: string;
+    latitude: number;
+    longitude: number;
+    status: string;
+}
+
 // --- Constants (Moved outside to prevent re-creation) ---
 const CENTER_NODE = L.latLng(51.505, -0.09); // "The Junction"
 const DETOUR_NODE = L.latLng(51.5115, -0.1044); // Blackfriars Bridge (North Bank)
@@ -166,6 +174,7 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
 
 export default function RoutePlanner() {
     const [stats, setStats] = useState<StreamStats | null>(null);
+    const [junctions, setJunctions] = useState<Junction[]>([]);
 
     // State for Dynamic Points
     const [startPoint, setStartPoint] = useState<L.LatLng>(L.latLng(51.500, -0.10));
@@ -218,6 +227,36 @@ export default function RoutePlanner() {
 
         return () => {
             supabase.removeChannel(channel);
+        };
+    }, []);
+
+    // Fetch junctions from database
+    useEffect(() => {
+        const fetchJunctions = async () => {
+            const { data, error } = await supabase.from('junctions').select('*').order('id');
+            if (error) {
+                console.error('Error fetching junctions:', error);
+            } else if (data) {
+                setJunctions(data);
+            }
+        };
+
+        fetchJunctions();
+
+        // Subscribe to junction updates
+        const junctionChannel = supabase
+            .channel('route-planner-junctions')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'junctions' },
+                () => {
+                    fetchJunctions(); // Reload when junctions change
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(junctionChannel);
         };
     }, []);
 
@@ -305,6 +344,38 @@ export default function RoutePlanner() {
 
                     <Marker position={startPoint}><Popup>Start: {startQuery}</Popup></Marker>
                     <Marker position={endPoint}><Popup>Destination: {endQuery}</Popup></Marker>
+
+                    {/* Junction Markers */}
+                    {junctions.map(junction => {
+                        if (!junction.latitude || !junction.longitude) return null;
+
+                        const junctionIcon = L.divIcon({
+                            className: 'custom-icon',
+                            html: `<div style="
+                                background-color: ${junction.status === 'active' ? '#28a745' : '#777'};
+                                width: 16px;
+                                height: 16px;
+                                border-radius: 50%;
+                                border: 2px solid white;
+                                box-shadow: 0 0 10px rgba(0,0,0,0.5);
+                            "></div>`,
+                            iconSize: [16, 16],
+                            iconAnchor: [8, 8]
+                        });
+
+                        return (
+                            <Marker
+                                key={junction.id}
+                                position={[junction.latitude, junction.longitude]}
+                                icon={junctionIcon}
+                            >
+                                <Popup>
+                                    <strong>{junction.name} (ID: {junction.id})</strong><br />
+                                    Status: {junction.status.toUpperCase()}
+                                </Popup>
+                            </Marker>
+                        );
+                    })}
 
                     {/* Routing Logic */}
                     <Routing start={startPoint} end={endPoint} avoidPoint={avoidNode} />

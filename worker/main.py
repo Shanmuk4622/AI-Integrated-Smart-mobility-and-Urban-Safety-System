@@ -64,9 +64,13 @@ def main():
         )
         processor.start()
     except KeyboardInterrupt:
-        print("Worker stopped by user.")
+        print("\nWorker interrupting...")
+        if 'processor' in locals():
+            processor.stop()
     except Exception as e:
         print(f"CRITICAL ERROR: {e}")
+        if 'processor' in locals():
+            processor.stop()
         import traceback
         traceback.print_exc()
 

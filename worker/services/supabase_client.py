@@ -58,28 +58,43 @@ class SupabaseService:
         except Exception as e:
             print(f"ERROR: Failed to log violation: {e}")
 
-    def update_junction_info(self, junction_id: int, name: str, location: str):
-        """Updates the junction's static info (name, location) on startup."""
+    def update_junction_info(self, junction_id: int, name: str, latitude: float, longitude: float):
+        """Updates the junction's static info (name, lat, long) on startup."""
         try:
             # Check if exists first
             res = self.supabase.table("junctions").select("id").eq("id", junction_id).execute()
             
             data = {
                 "name": name,
-                "location": location,
+                "latitude": latitude,
+                "longitude": longitude,
                 "status": "active"
             }
             
+            print(f"DEBUG: Attempting to update Junction {junction_id} with data: {data}")
+            
             if res.data:
                 # Update
-                self.supabase.table("junctions").update(data).eq("id", junction_id).execute()
-                print(f"DEBUG: Updated Junction {junction_id} info: {name} @ {location}")
+                update_response = self.supabase.table("junctions").update(data).eq("id", junction_id).execute()
+                print(f"DEBUG: Update response: {update_response}")
+                print(f"DEBUG: Updated Junction {junction_id} info: {name} @ {latitude}, {longitude}")
             else:
                 # Insert (Optional, if we want auto-registration)
                 data["id"] = junction_id
                 data["video_source"] = "auto-registered" # Placeholder
-                self.supabase.table("junctions").insert(data).execute()
+                insert_response = self.supabase.table("junctions").insert(data).execute()
+                print(f"DEBUG: Insert response: {insert_response}")
                 print(f"DEBUG: Registered New Junction {junction_id}")
                 
         except Exception as e:
             print(f"ERROR: Failed to update junction info: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_status(self, junction_id: int, status: str):
+        """Updates the junction status (active/offline)."""
+        try:
+            self.supabase.table("junctions").update({"status": status}).eq("id", junction_id).execute()
+            print(f"DEBUG: Junction {junction_id} status set to: {status}")
+        except Exception as e:
+             print(f"ERROR: Failed to update status: {e}")

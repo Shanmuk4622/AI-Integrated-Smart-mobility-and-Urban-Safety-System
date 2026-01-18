@@ -6,9 +6,11 @@ import os
 
 # 1. Identity
 JUNCTION_ID = 1  # Default ID for this worker
-LOCATION_NAME = "Main St & 4th Ave" # Junction Location Description
-# Coordinates for MAP (Lat, Long string)
-COORDINATES = "40.7128,-74.0060"
+LOCATION_NAME = "London (Canary Wharf)" # Junction Location Description
+
+# GEOGRAPHIC COORDINATES (Decimal Degrees)
+LATITUDE = 51.5055
+LONGITUDE = -0.0158
 
 # 2. Input
 # Path to video file OR RTSP Stream URL

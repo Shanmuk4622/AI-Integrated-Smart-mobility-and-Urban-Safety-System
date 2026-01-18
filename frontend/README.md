@@ -1,73 +1,39 @@
-# React + TypeScript + Vite
+# Frontend Dashboard - Technical Overview
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## 🧠 How It Works
+The frontend is a **Real-Time Reactive Application**. Unlike traditional dashboards that poll a server every few seconds ("Are there updates?"), this application maintains an open socket connection to Supabase to receive updates *instantly*.
 
-Currently, two official plugins are available:
+### 1. The Map Layer (Leaflet)
+**File**: `src/pages/AdminDashboard.tsx`, `src/pages/UserView.tsx`
+- **Initialization**: On load, it fetches the static list of `junctions` from Supabase (ID, Name, Coordinates).
+- **Rendering**: Uses `react-leaflet` to plot these points on an OpenStreetMap layer.
+- **Interaction**: Clicking a marker sets the `activeJunction` state, triggering the sidebar to load specific data for that node.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 2. Real-Time Data Streams (Supabase Realtime)
+**File**: `src/lib/supabaseClient.ts`, `src/pages/AdminDashboard.tsx`
+This is the core of the "Live" experience.
+- **Traffic Logs**: We subscribe to `INSERT` events on the `traffic_logs` table.
+    ```typescript
+    supabase
+      .channel('traffic_updates')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'traffic_logs' }, (payload) => {
+          // payload.new contains the latest { vehicle_count, congestion_level }
+          updateStats(payload.new);
+      })
+      .subscribe();
+    ```
+- **Violations**: A separate channel listens for `violations`. When a worker logs a "Wrong Way" driver, the alert appears on the dashboard milliseconds later.
 
-## React Compiler
+### 3. Route Planning Algorithm
+**File**: `src/pages/RoutePlanner.tsx`
+- **Logic**: It fetches the latest traffic density for *all* junctions.
+- **Weighting**: It calculates a "Cost" for potential routes. 
+    - `Cost = Distance * (1 + Congestion_Factor)`
+    - High congestion (Density > 20) increases the travel cost of a route, causing the logic to suggest alternative paths.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🛠️ Setup & Run
+1.  **Install Dependencies**: `npm install`
+2.  **Environment**: `.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+3.  **Run**: `npm run dev`
