@@ -1,0 +1,17 @@
+{
+    "buildCommand": "cd frontend && npm install && npm run build",
+    "outputDirectory": "frontend/dist",
+    "devCommand": "cd frontend && npm run dev",
+    "installCommand": "cd frontend && npm install",
+    "framework": "vite",
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ],
+    "env": {
+        "VITE_SUPABASE_URL": "@supabase_url",
+        "VITE_SUPABASE_ANON_KEY": "@supabase_anon_key"
+    }
+}
