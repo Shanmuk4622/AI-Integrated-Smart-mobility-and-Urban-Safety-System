@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 import './UserView.css';
 
 interface SignalStatus {
@@ -15,21 +16,46 @@ interface StreamStats {
 
 export default function UserView() {
     const [stats, setStats] = useState<StreamStats | null>(null);
-    const ws = useRef<WebSocket | null>(null);
 
     useEffect(() => {
-        ws.current = new WebSocket('ws://localhost:8000/ws/stream');
+        // Default to Junction 1 for Public View
+        const junctionId = 1;
 
-        ws.current.onmessage = (event) => {
-            if (typeof event.data === "string") {
-                const data = JSON.parse(event.data);
-                setStats(data);
+        const fetchInitial = async () => {
+            const { data } = await supabase
+                .from('traffic_logs')
+                .select('*')
+                .eq('junction_id', junctionId)
+                .order('timestamp', { ascending: false })
+                .limit(1)
+                .single();
+            if (data) {
+                setStats({
+                    density: data.vehicle_count,
+                    ambulance: false,
+                    signal: { action: "GREEN", duration: 30, reason: "Public View" }
+                });
             }
         };
+        fetchInitial();
 
-        return () => {
-            ws.current?.close();
-        };
+        const channel = supabase
+            .channel('public-view-traffic')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'traffic_logs', filter: `junction_id=eq.${junctionId}` },
+                (payload) => {
+                    const newLog = payload.new as any;
+                    setStats({
+                        density: newLog.vehicle_count,
+                        ambulance: false,
+                        signal: { action: "GREEN", duration: 30, reason: "Live" }
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
     }, []);
 
     return (

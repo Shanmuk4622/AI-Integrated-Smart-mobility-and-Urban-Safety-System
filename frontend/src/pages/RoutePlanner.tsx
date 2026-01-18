@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
+import { supabase } from '../lib/supabaseClient';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -41,6 +42,7 @@ const DETOUR_NODE = L.latLng(51.5115, -0.1044); // Blackfriars Bridge (North Ban
 const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: L.LatLng, avoidPoint: L.LatLng | null }) => {
     const map = useMap();
     const routingControlRef = useRef<any>(null);
+    const labelMarkersRef = useRef<L.Marker[]>([]); // Track label markers
 
     useEffect(() => {
         if (!map) return;
@@ -55,6 +57,10 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
             }
         }
 
+        // Cleanup previous labels
+        labelMarkersRef.current.forEach(m => m.remove());
+        labelMarkersRef.current = [];
+
         const waypoints = [start];
         const isAvoiding = !!avoidPoint;
 
@@ -68,7 +74,7 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
             serviceUrl: 'https://router.project-osrm.org/route/v1',
             profile: 'driving',
             requestParameters: {
-                alternatives: true, // Explicitly ask API for alternatives
+                alternatives: true,
                 steps: true
             }
         });
@@ -76,7 +82,6 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
         const routingControl = (L as any).Routing.control({
             waypoints: waypoints,
             routeWhileDragging: false,
-            // Only show alternatives when we are NOT avoiding traffic.
             showAlternatives: !isAvoiding,
             fitSelectedRoutes: true,
             lineOptions: {
@@ -89,9 +94,50 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
                     { color: '#BEBEBE', opacity: 1, weight: 4 }   // Main Grey
                 ]
             },
-            createMarker: function () { return null; }, // Hide default markers
+            createMarker: function () { return null; },
             router: router
         }).addTo(map);
+
+        // --- Custom Labels Logic ---
+        routingControl.on('routesfound', function (e: any) {
+            // Clear old labels first
+            labelMarkersRef.current.forEach(m => m.remove());
+            labelMarkersRef.current = [];
+
+            const routes = e.routes;
+            routes.forEach((route: any) => {
+                const summary = route.summary;
+                if (!summary) return;
+
+                const timeMin = Math.round(summary.totalTime / 60);
+                const distKm = (summary.totalDistance / 1000).toFixed(1);
+
+                // Calculate display content (distance + time)
+                const html = `
+                    <div style="font-size:12px; color:#222; font-weight:bold;">${timeMin} min</div>
+                    <div style="font-size:10px; color:#666;">${distKm} km</div>
+                `;
+
+                // Find midpoint for label
+                const coordinates = route.coordinates;
+                const midIndex = Math.floor(coordinates.length / 2); // Simple midpoint
+                const midPoint = coordinates[midIndex];
+
+                if (midPoint) {
+                    const label = L.marker(midPoint, {
+                        icon: L.divIcon({
+                            className: 'route-label', // defined in App.css
+                            html: html,
+                            iconSize: [60, 30],
+                            iconAnchor: [30, 30]
+                        }),
+                        zIndexOffset: 1000
+                    }).addTo(map);
+
+                    labelMarkersRef.current.push(label);
+                }
+            });
+        });
 
         routingControlRef.current = routingControl;
 
@@ -101,6 +147,9 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
                     map.removeControl(routingControlRef.current);
                 } catch (e) { }
             }
+            // Cleanup labels on unmount/re-render
+            labelMarkersRef.current.forEach(m => m.remove());
+            labelMarkersRef.current = [];
         };
     }, [map, start.lat, start.lng, end.lat, end.lng, !!avoidPoint]);
 
@@ -117,7 +166,6 @@ const Routing = React.memo(({ start, end, avoidPoint }: { start: L.LatLng, end: 
 
 export default function RoutePlanner() {
     const [stats, setStats] = useState<StreamStats | null>(null);
-    const ws = useRef<WebSocket | null>(null);
 
     // State for Dynamic Points
     const [startPoint, setStartPoint] = useState<L.LatLng>(L.latLng(51.500, -0.10));
@@ -128,14 +176,49 @@ export default function RoutePlanner() {
     const [endQuery, setEndQuery] = useState("Tower of London");
 
     useEffect(() => {
-        ws.current = new WebSocket('ws://localhost:8000/ws/stream');
-        ws.current.onmessage = (event) => {
-            if (typeof event.data === "string") {
-                const data = JSON.parse(event.data);
-                setStats(data);
+        // Subscribe to changes in traffic logs for Junction 1 (System Default for this demo)
+        const junctionId = 1;
+
+        // Fetch initial state
+        const fetchInitial = async () => {
+            const { data } = await supabase
+                .from('traffic_logs')
+                .select('*')
+                .eq('junction_id', junctionId)
+                .order('timestamp', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (data) {
+                setStats({
+                    density: data.vehicle_count,
+                    ambulance: false, // Traffic logs might not have this, simplified
+                    signal: { action: "GREEN", duration: 30, reason: "Initial" } // default
+                });
             }
         };
-        return () => { ws.current?.close(); };
+
+        fetchInitial();
+
+        const channel = supabase
+            .channel('route-planner-traffic')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'traffic_logs', filter: `junction_id=eq.${junctionId}` },
+                (payload) => {
+                    const newLog = payload.new as any;
+                    setStats({
+                        density: newLog.vehicle_count,
+                        ambulance: false, // You might want to update schema to include this in traffic_logs if crucial
+                        signal: { action: "GREEN", duration: 30, reason: "Live Update" }
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const isCongested = stats ? (stats.density > 10 || stats.ambulance) : false;

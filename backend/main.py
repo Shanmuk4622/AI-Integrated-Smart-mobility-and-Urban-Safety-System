@@ -10,6 +10,7 @@ import asyncio
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.ai_pipeline import SmartMobilitySystem
+import config  # Import the new config
 
 app = FastAPI(title="Smart Mobility System API")
 
@@ -24,7 +25,7 @@ app.add_middleware(
 # Paths to models
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-VIDEO_PATH = os.path.join(ASSETS_DIR, "Videos", "sample2.mp4")
+# VIDEO_PATH is now taken from config.py
 COCO_MODEL = os.path.join(ASSETS_DIR, "yolov8n.pt")
 LP_MODEL = os.path.join(ASSETS_DIR, "license_plate_detector.pt")
 
@@ -43,7 +44,7 @@ async def websocket_endpoint(websocket: WebSocket):
         # Initialize System for this connection
         print("Initializing SmartMobilitySystem...")
         system = SmartMobilitySystem(
-            video_path=VIDEO_PATH,
+            video_path=config.VIDEO_PATH, # Use Config
             coco_model_path=COCO_MODEL,
             lp_model_path=LP_MODEL
         )

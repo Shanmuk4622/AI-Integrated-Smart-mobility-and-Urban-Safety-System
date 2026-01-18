@@ -15,6 +15,7 @@ import argparse
 import torch
 from filterpy.kalman import KalmanFilter
 from .traffic_rules import TrafficController
+import config
 
 # ==========================================
 # SORT ALGORITHM (Embedded to avoid import errors)
@@ -278,6 +279,17 @@ class SmartMobilitySystem:
         self.total_cars = 0
         self.ambulance_detected = False
         self.wrong_way_violations = []
+
+        # Video Saving Setup
+        self.out = None
+        if config.SAVE_VIDEO:
+            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = self.cap.get(cv2.CAP_PROP_FPS) or config.TARGET_FPS
+            
+            output_path = os.path.join(config.OUTPUT_DIR, f"processed_{int(time.time())}.mp4")
+            self.out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+            print(f"DEBUG: Recording enabled. Saving to {output_path}")
         
         print(f"DEBUG: SmartMobilitySystem Initialized. Video: {self.video_path}")
         if not self.cap.isOpened():
@@ -465,6 +477,18 @@ class SmartMobilitySystem:
             _, buffer = cv2.imencode('.jpg', frame)
             frame_bytes = buffer.tobytes()
             
+            # --- CONFIGURABLE OUTPUT ---
+            
+            # 1. Save Video
+            if self.out:
+                self.out.write(frame)
+                
+            # 2. Show GUI
+            if config.SHOW_GUI:
+                cv2.imshow("Smart Mobility AI Core", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            
             # Gather visible plates
             visible_plates = []
             for tr in tracks:
@@ -482,3 +506,9 @@ class SmartMobilitySystem:
             }
             
             yield frame_bytes, stats
+        
+        # Cleanup when loop ends
+        if self.out:
+            self.out.release()
+        self.cap.release()
+        cv2.destroyAllWindows()
