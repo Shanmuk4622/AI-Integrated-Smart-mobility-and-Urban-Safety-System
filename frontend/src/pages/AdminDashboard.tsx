@@ -50,7 +50,7 @@ export default function AdminDashboard() {
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'traffic_logs', filter: `junction_id=eq.${selectedJunctionId}` },
-                (payload) => {
+                (payload: any) => {
                     const newLog = payload.new as TrafficLog;
                     setCurrentLog(newLog);
 
@@ -68,7 +68,7 @@ export default function AdminDashboard() {
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'violations', filter: `junction_id=eq.${selectedJunctionId}` },
-                (payload) => {
+                (payload: any) => {
                     const newViolation = payload.new as Violation;
                     setRecentViolations(prev => [newViolation, ...prev.slice(0, 4)]);
                     addLog(`🚨 VIOLATION: ${newViolation.violation_type} detected!`);

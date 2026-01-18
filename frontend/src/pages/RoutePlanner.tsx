@@ -304,7 +304,7 @@ export default function RoutePlanner() {
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'traffic_logs', filter: `junction_id=eq.${junctionId}` },
-                (payload) => {
+                (payload: any) => {
                     const newLog = payload.new as any;
                     setStats({
                         density: newLog.vehicle_count,
@@ -338,7 +338,7 @@ export default function RoutePlanner() {
 
             // Fetch latest traffic log for each junction
             const junctionsWithCongestionData = await Promise.all(
-                junctionsData.map(async (junction) => {
+                junctionsData.map(async (junction: any) => {
                     const { data: trafficLog } = await supabase
                         .from('traffic_logs')
                         .select('congestion_level, vehicle_count')

@@ -44,7 +44,7 @@ export default function UserView() {
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'traffic_logs', filter: `junction_id=eq.${junctionId}` },
-                (payload) => {
+                (payload: any) => {
                     const newLog = payload.new as any;
                     setStats({
                         density: newLog.vehicle_count,
