@@ -20,8 +20,9 @@ def main():
     # Arguments default to None so we can know if user provided them
     parser.add_argument("--junction_id", type=int, help=f"ID of the junction (Default: {config.JUNCTION_ID})")
     parser.add_argument("--source", type=str, help=f"Video Source (Default: {config.VIDEO_SOURCE})")
-    parser.add_argument("--coco_model", type=str, default=DEFAULT_COCO, help="Path to YOLOv8 COCO model")
-    parser.add_argument("--lp_model", type=str, default=DEFAULT_LP, help="Path to License Plate model")
+    parser.add_argument("--coco_model", type=str, default=config.COCO_MODEL_PATH, help="Path to YOLOv8 COCO model")
+    parser.add_argument("--lp_model", type=str, default=config.LP_MODEL_PATH, help="Path to License Plate model")
+
     parser.add_argument("--no-gui", action="store_true", help="Disable GUI window")
     parser.add_argument("--save", action="store_true", help="Enable video saving")
     

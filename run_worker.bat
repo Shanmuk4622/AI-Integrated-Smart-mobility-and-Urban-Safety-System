@@ -14,8 +14,8 @@ echo [INFO] Checking Dependencies...
 pip install -r worker\requirements.txt
 
 echo.
-echo [INFO] Starting Worker (Junction 1)...
-python worker\main.py --junction_id 1 --source "worker\Videos\sample2.mp4"
+echo [INFO] Starting Worker...
+python worker\main.py %*
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

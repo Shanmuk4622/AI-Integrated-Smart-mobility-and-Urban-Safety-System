@@ -57,3 +57,29 @@ class SupabaseService:
             print(f"DEBUG: Logged VIOLATION [{violation_type}] for Junction {junction_id}")
         except Exception as e:
             print(f"ERROR: Failed to log violation: {e}")
+
+    def update_junction_info(self, junction_id: int, name: str, location: str):
+        """Updates the junction's static info (name, location) on startup."""
+        try:
+            # Check if exists first
+            res = self.supabase.table("junctions").select("id").eq("id", junction_id).execute()
+            
+            data = {
+                "name": name,
+                "location": location,
+                "status": "active"
+            }
+            
+            if res.data:
+                # Update
+                self.supabase.table("junctions").update(data).eq("id", junction_id).execute()
+                print(f"DEBUG: Updated Junction {junction_id} info: {name} @ {location}")
+            else:
+                # Insert (Optional, if we want auto-registration)
+                data["id"] = junction_id
+                data["video_source"] = "auto-registered" # Placeholder
+                self.supabase.table("junctions").insert(data).execute()
+                print(f"DEBUG: Registered New Junction {junction_id}")
+                
+        except Exception as e:
+            print(f"ERROR: Failed to update junction info: {e}")

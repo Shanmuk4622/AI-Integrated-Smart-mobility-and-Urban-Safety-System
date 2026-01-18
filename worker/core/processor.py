@@ -79,6 +79,10 @@ class PlateSmoother:
         if score >= prev['score']: self.best_text[track_id] = {'text': text, 'score': float(score)}
     def get_best_text(self, track_id):
         return self.best_text.get(track_id, {'text': '0', 'score': 0.0})
+    def get_last_bbox(self, track_id):
+        if track_id in self.bbox_buffers and len(self.bbox_buffers[track_id]) > 0:
+             return np.stack(self.bbox_buffers[track_id], axis=0).mean(axis=0).tolist()
+        return None
 
 # --- WORKER CLASS ---
 
@@ -138,7 +142,17 @@ class JunctionProcessor:
         # State
         self.wrong_way_violations = []
         self.last_log_time = 0
+        self.last_log_time = 0
         self.last_frame_time = 0
+        self.latest_lp_boxes = [] # Store for visualization
+
+        # Sync Config to DB
+        if self.config:
+            self.db.update_junction_info(
+                junction_id=self.junction_id,
+                name=self.config.LOCATION_NAME,
+                location=self.config.COORDINATES
+            )
 
     def detect_ambulance(self, frame, box):
         x1, y1, x2, y2 = map(int, box)
@@ -189,6 +203,9 @@ class JunctionProcessor:
             if frame_num % 5 == 0:
                 lp_results = self.lp_model(frame, verbose=False)[0]
                 lp_boxes = lp_results.boxes.data.tolist() if lp_results.boxes else []
+                self.latest_lp_boxes = lp_boxes # Update cache
+            else:
+                lp_boxes = self.latest_lp_boxes # Use cached boxes for drawing/matching logic continuity
             
             current_lane_density = len(tracks)
             ambulance_in_frame = False
@@ -226,12 +243,23 @@ class JunctionProcessor:
                         lx1, ly1, lx2, ly2, lscore, _ = lp
                         lx_c, ly_c = (lx1+lx2)/2, (ly1+ly2)/2
                         if sx1 < lx_c < sx2 and sy1 < ly_c < sy2:
-                            # It's a match, read it
+                            # It's a match
+                            # Update plate bbox smoother
+                            self.plate_smoother.update_bbox(tid, [lx1, ly1, lx2, ly2])
+                            
                             plate_crop = frame[int(ly1):int(ly2), int(lx1):int(lx2)]
                             if plate_crop.shape[0] > 0 and plate_crop.shape[1] > 0:
                                 p_text, p_score = read_license_plate(plate_crop)
                                 if p_text:
                                     self.plate_smoother.update_text(tid, p_text, p_score)
+                
+                # --- BETTER DRAWING LOGIC ---
+                # Draw Plate BBox if available
+                p_bbox = self.plate_smoother.get_last_bbox(tid)
+                if p_bbox:
+                    px1, py1, px2, py2 = map(int, p_bbox)
+                    cv2.rectangle(frame, (px1, py1), (px2, py2), (255, 255, 0), 2) # Cyan for plate
+
                 
                 # --- BETTER DRAWING LOGIC ---
                 # Get best plate text
@@ -290,7 +318,7 @@ class JunctionProcessor:
                 cv2.rectangle(frame, (10, 10), (350, 210), (0, 0, 0), -1)
                 
                 # 1. Location & ID
-                cv2.putText(frame, f"LOC: {self.config.LOCATION}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                cv2.putText(frame, f"LOC: {self.config.LOCATION_NAME}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                 cv2.putText(frame, f"ID: {self.config.JUNCTION_ID} | FPS: {int(fps)}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                 
                 # 2. Traffic Stats
