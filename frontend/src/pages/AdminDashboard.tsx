@@ -7,10 +7,17 @@ interface SignalStatus {
     reason: string;
 }
 
+interface PlateInfo {
+    id: number;
+    text: string;
+}
+
 interface StreamStats {
     density: number;
     signal: SignalStatus;
     ambulance: boolean;
+    violations: number;
+    plates: PlateInfo[];
 }
 
 export default function AdminDashboard() {
@@ -92,6 +99,25 @@ export default function AdminDashboard() {
                         <div className="big-value">{stats?.signal?.action || "IDLE"}</div>
                         <div className="sub-value">{stats?.signal?.duration || 0}s</div>
                         <small>{stats?.signal?.reason || "Waiting..."}</small>
+                    </div>
+
+                    <div className="card icon-card">
+                        <h3>Wrong Way</h3>
+                        <div className="big-value">{stats?.violations || 0}</div>
+                        <small>Violations Detected</small>
+                    </div>
+
+                    <div className="card list-card">
+                        <h3>Live Plates</h3>
+                        <ul>
+                            {stats?.plates && stats.plates.length > 0 ? (
+                                stats.plates.slice(0, 5).map(p => (
+                                    <li key={p.id}>ID {p.id}: <b>{p.text}</b></li>
+                                ))
+                            ) : (
+                                <li className="empty">scanning...</li>
+                            )}
+                        </ul>
                     </div>
 
                     <div className="logs-section">

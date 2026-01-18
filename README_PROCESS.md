@@ -1,8 +1,29 @@
 # Project Process & Progress Log
 
+# Project Process & Progress Log
+
 This document tracks the development journey of the **AI Integrated Smart Mobility System**.
 
-## Phase 1: Environment & Stability Fixes
+## System Architecture
+
+The system follows a **Hybrid Real-Time Client-Server Architecture** designed for high-throughput video analytics.
+
+### 1. **The Core (Backend)**
+*   **Framework**: FastAPI (Python). Chosen for high performance and easy async support.
+*   **AI Engine**:
+    *   **YOLOv8** (Object Detection) & **EasyOCR** (Text Extraction) running on **GPU (CUDA)**.
+    *   **SORT Algorithm**: Tracks vehicles across frames to assign unique IDs.
+    *   **Logic Layer**: `traffic_rules.py` decides signal timings based on real-time density.
+*   **Stream Protocol**: A single **WebSocket** connection streams both:
+    *   **Video**: Encoded JPEG frames (Binary).
+    *   **Telemetry**: Usage stats, signal status, and alerts (JSON).
+
+### 2. **The Interface (Frontend)**
+*   **Framework**: React (Vite) + TypeScript.
+*   **Visuals**: Custom CSS (Glassmorphism design).
+*   **State Management**: Real-time React Hooks (`useState`, `useRef`) handling 30+ updates per second.
+
+---
 - **Virtual Environment**: Created `.venv` to isolate dependencies.
 - **Path Configuration**: Fixed `BASE_DIR` logic in `main.py` to correctly locate models.
 - **Corrupt Files**: Resolved critical `ValueError: source code string cannot contain null bytes` by cleaning `sort/__init__.py` and eventually embedding the `SORT` algorithm directly into `ai_pipeline.py` to eliminate import risks.

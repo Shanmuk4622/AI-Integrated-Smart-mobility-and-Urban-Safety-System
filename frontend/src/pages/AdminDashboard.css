@@ -79,7 +79,31 @@
     background-color: #2d2d2d;
     padding: 15px;
     border-radius: 8px;
-    border: 1px solid #444;
+    box-shadow: 0 4px 15px rgba(255, 68, 68, 0.4);
+}
+
+.list-card ul {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 0 0;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.list-card li {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.list-card li b {
+    color: #ffd700;
+    float: right;
+}
+
+.list-card .empty {
+    color: #aaa;
+    font-style: italic;
+    text-align: center;
 }
 
 .card.alert {
