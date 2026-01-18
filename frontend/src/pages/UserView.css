@@ -1,0 +1,128 @@
+.user-view-container {
+    padding: 20px;
+    background-color: #f0f2f5;
+    min-height: 100vh;
+    font-family: 'Segoe UI', sans-serif;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    padding: 15px 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px;
+}
+
+.live-indicator {
+    background: #ff4444;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: bold;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.status-hero {
+    margin-bottom: 40px;
+    text-align: center;
+}
+
+.status-card {
+    padding: 40px;
+    border-radius: 16px;
+    color: white;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.status-card.normal {
+    background: linear-gradient(135deg, #28a745, #218838);
+}
+
+.status-card.emergency {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    animation: pulse-emergency 1s infinite alternate;
+}
+
+@keyframes pulse-emergency {
+    from {
+        transform: scale(1);
+        box-shadow: 0 0 10px #ff0000;
+    }
+
+    to {
+        transform: scale(1.02);
+        box-shadow: 0 0 30px #ff0000;
+    }
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.info-card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.signal-light {
+    font-size: 2em;
+    font-weight: bold;
+    margin: 10px auto;
+    width: 100px;
+    height: 100px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    color: white;
+}
+
+.signal-light.green {
+    background-color: #28a745;
+    box-shadow: 0 0 20px #28a745;
+}
+
+.signal-light.red {
+    background-color: #dc3545;
+    box-shadow: 0 0 20px #dc3545;
+}
+
+.density-meter {
+    font-size: 2.5em;
+    font-weight: bold;
+    color: #4facfe;
+}
+
+.user-footer {
+    margin-top: auto;
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-size: 0.9em;
+}

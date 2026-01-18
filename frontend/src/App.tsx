@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import AdminDashboard from './pages/AdminDashboard';
+import UserView from './pages/UserView';
 import './App.css';
 
 function App() {
@@ -17,7 +18,7 @@ function App() {
         <main className="content-area">
           <Routes>
             <Route path="/" element={<AdminDashboard />} />
-            <Route path="/user" element={<div className="placeholder">User Map coming soon...</div>} />
+            <Route path="/user" element={<UserView />} />
           </Routes>
         </main>
       </div>
