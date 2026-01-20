@@ -11,7 +11,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Only ignore Python lib directories, not frontend/src/lib
+**/lib/
+!frontend/src/lib/
 lib64/
 parts/
 sdist/
