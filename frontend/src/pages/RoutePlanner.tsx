@@ -323,10 +323,11 @@ export default function RoutePlanner() {
     // Fetch junctions with congestion data from database
     useEffect(() => {
         const fetchJunctionsWithCongestion = async () => {
-            // Fetch all junctions
+            // Fetch only ACTIVE junctions
             const { data: junctionsData, error: junctionsError } = await supabase
                 .from('junctions')
                 .select('*')
+                .eq('status', 'active')  // Only fetch active junctions
                 .order('id');
 
             if (junctionsError) {
@@ -341,16 +342,21 @@ export default function RoutePlanner() {
                 junctionsData.map(async (junction: any) => {
                     const { data: trafficLog } = await supabase
                         .from('traffic_logs')
-                        .select('congestion_level, vehicle_count')
+                        .select('congestion_level, vehicle_count, timestamp')
                         .eq('junction_id', junction.id)
                         .order('timestamp', { ascending: false })
                         .limit(1)
                         .single();
 
+                    // Check if data is fresh (within last 30 seconds)
+                    const isDataFresh = trafficLog &&
+                        (new Date().getTime() - new Date(trafficLog.timestamp).getTime()) < 30000;
+
                     return {
                         ...junction,
-                        congestion_level: trafficLog?.congestion_level || 'Low',
-                        vehicle_count: trafficLog?.vehicle_count || 0
+                        congestion_level: isDataFresh ? (trafficLog?.congestion_level || 'Low') : 'Unknown',
+                        vehicle_count: isDataFresh ? (trafficLog?.vehicle_count || 0) : 0,
+                        isDataFresh
                     };
                 })
             );
@@ -562,8 +568,9 @@ export default function RoutePlanner() {
                                     <strong>{junction.name} (ID: {junction.id})</strong><br />
                                     Status: {junction.status.toUpperCase()}<br />
                                     Congestion: {junction.congestion_level || 'Unknown'}<br />
-                                    Vehicles: {junction.vehicle_count || 0}
-                                    {isCongestedInPath && <><br /><strong style={{ color: 'red' }}>⚠️ IN ROUTE PATH</strong></>}
+                                    Vehicles: {junction.vehicle_count || 0}<br />
+                                    {!(junction as any).isDataFresh && <><span style={{ color: 'orange' }}>⚠️ Data may be stale</span><br /></>}
+                                    {isCongestedInPath && <><strong style={{ color: 'red' }}>⚠️ IN ROUTE PATH</strong></>}
                                 </Popup>
                             </Marker>
                         );
