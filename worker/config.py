@@ -5,12 +5,12 @@ import os
 # ==========================================
 
 # 1. Identity
-JUNCTION_ID = 2  # Default ID for this worker
-LOCATION_NAME = "Lonndon Bridge" # Junction Location Description
+JUNCTION_ID = 3  # Default ID for this worker
+LOCATION_NAME = "VIT-AP University" # Junction Location Description
 
 # GEOGRAPHIC COORDINATES (Decimal Degrees)
-LATITUDE = 51.507740595542955
-LONGITUDE = -0.08789167536240972
+LATITUDE = 16.490026
+LONGITUDE = 80.513759
 
 # 2. Input
 # Path to video file OR RTSP Stream URL

@@ -18,7 +18,7 @@ SAVE_VIDEO = True
 
 # 3. Input Source
 # Path to input video file
-VIDEO_PATH = os.path.join(ASSETS_DIR, "Videos", "sample2.mp4")
+VIDEO_PATH = os.path.join(ASSETS_DIR, "Videos", "sample3.mp4")
 
 # 4. Processing Settings
 # Target FPS (approximate)

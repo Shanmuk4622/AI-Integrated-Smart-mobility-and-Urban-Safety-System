@@ -3,26 +3,7 @@ import './AdminDashboard.css';
 import { supabase } from '../lib/supabaseClient';
 import RoadMap from '../components/RoadMap';
 
-interface Junction {
-    id: number;
-    name: string;
-    latitude: number;
-    longitude: number;
-    status: string;
-}
-
-interface TrafficLog {
-    junction_id: number;
-    vehicle_count: number;
-    congestion_level: string;
-    avg_speed: number;
-}
-
-interface Violation {
-    id: number;
-    violation_type: string;
-    timestamp: string;
-}
+import type { Junction, TrafficLog, Violation } from '../types';
 
 export default function AdminDashboard() {
     const [junctions, setJunctions] = useState<Junction[]>([]);
@@ -44,7 +25,7 @@ export default function AdminDashboard() {
         fetchLatestStats(selectedJunctionId);
         fetchViolations(selectedJunctionId);
 
-        // 2. Subscribe to Realtime Updates for Traffic Logs
+        // 2. Subscribe to Realtime Updates for Traffic Logs (Specific Junction Stats)
         const trafficChannel = supabase
             .channel('traffic-updates')
             .on(
@@ -53,11 +34,28 @@ export default function AdminDashboard() {
                 (payload: any) => {
                     const newLog = payload.new as TrafficLog;
                     setCurrentLog(newLog);
-
-                    // Simple logic for alerts based on new data
                     if (newLog.congestion_level === 'High') {
                         addLog(`⚠️ High Congestion detected at Junction ${selectedJunctionId}`);
                     }
+                }
+            )
+            .subscribe();
+
+        // 2b. GLOBAL Traffic channel to update Map Markers (Red/Blue) for ALL junctions
+        const globalTrafficChannel = supabase
+            .channel('global-traffic-map')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'traffic_logs' },
+                (payload: any) => {
+                    const newLog = payload.new;
+                    setJunctions(prevJunctions =>
+                        prevJunctions.map(j =>
+                            j.id === newLog.junction_id
+                                ? { ...j, vehicle_count: newLog.vehicle_count, congestion_level: newLog.congestion_level }
+                                : j
+                        )
+                    );
                 }
             )
             .subscribe();
@@ -90,17 +88,44 @@ export default function AdminDashboard() {
 
         return () => {
             supabase.removeChannel(trafficChannel);
+            supabase.removeChannel(globalTrafficChannel);
             supabase.removeChannel(violationChannel);
             supabase.removeChannel(junctionChannel);
         };
     }, [selectedJunctionId]);
 
     const fetchJunctions = async () => {
-        const { data, error } = await supabase.from('junctions').select('*').order('id');
-        if (error) console.error('Error fetching junctions:', error);
-        else if (data) {
-            setJunctions(data);
-            if (data.length > 0) setSelectedJunctionId(data[0].id);
+        const { data: junctionsData, error } = await supabase.from('junctions').select('*').order('id');
+        if (error) {
+            console.error('Error fetching junctions:', error);
+            return;
+        }
+
+        if (junctionsData) {
+            // Fetch latest traffic stats for each junction
+            const enrichedJunctions = await Promise.all(
+                junctionsData.map(async (j) => {
+                    const { data: log } = await supabase
+                        .from('traffic_logs')
+                        .select('vehicle_count, congestion_level')
+                        .eq('junction_id', j.id)
+                        .order('timestamp', { ascending: false })
+                        .limit(1)
+                        .single();
+
+                    return {
+                        ...j,
+                        vehicle_count: log?.vehicle_count || 0,
+                        congestion_level: log?.congestion_level || 'Low' // Store for map usage
+                    };
+                })
+            );
+
+            console.log('✅ Fetched junctions:', enrichedJunctions);
+            setJunctions(enrichedJunctions);
+            if (enrichedJunctions.length > 0 && !selectedJunctionId) {
+                setSelectedJunctionId(enrichedJunctions[0].id);
+            }
         }
     };
 

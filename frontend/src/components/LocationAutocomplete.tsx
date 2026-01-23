@@ -1,12 +1,4 @@
-
-import { useState, useEffect, useRef } from 'react';
-
-interface Suggestion {
-    place_id: number;
-    lat: string;
-    lon: string;
-    display_name: string;
-}
+import { useEffect, useRef, useState } from 'react';
 
 interface LocationAutocompleteProps {
     value: string;
@@ -15,119 +7,72 @@ interface LocationAutocompleteProps {
     placeholder?: string;
 }
 
+// We rely on the Google Maps script being loaded by RoadMap's APIProvider or globally.
+// However, since this might be used outside the map context, we should ideally load it.
+// For now, we'll assume the script is loaded, or we check for window.google.
+
 export default function LocationAutocomplete({ value, onChange, onSelect, placeholder }: LocationAutocompleteProps) {
-    const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-    const [isOpen, setIsOpen] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const wrapperRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    // Debounce logic
     useEffect(() => {
-        const timer = setTimeout(() => {
-            if (value.length > 2 && isOpen) {
-                fetchSuggestions(value);
-            }
-        }, 500); // 500ms debounce
-
-        return () => clearTimeout(timer);
-    }, [value, isOpen]);
-
-    // Close on click outside
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
+        if (!inputRef.current || !window.google || !window.google.maps || !window.google.maps.places) {
+            // If google maps isn't loaded yet, we might need to wait or rely on APIProvider being up.
+            // A simple retry mechanism or check.
+            return;
         }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [wrapperRef]);
 
-    const fetchSuggestions = async (query: string) => {
-        setIsLoading(true);
-        try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
-            const data = await response.json();
-            setSuggestions(data);
-        } catch (error) {
-            console.error("Error fetching suggestions:", error);
-            setSuggestions([]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+            fields: ['place_id', 'geometry', 'name', 'formatted_address'],
+            types: ['geocode', 'establishment']
+        });
 
-    const handleSelect = (s: Suggestion) => {
-        onChange(s.display_name); // Update input text
-        onSelect(parseFloat(s.lat), parseFloat(s.lon), s.display_name);
-        setIsOpen(false);
-        setSuggestions([]);
-    };
+        autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+
+            if (!place.geometry || !place.geometry.location) {
+                setError("No location data available for this place.");
+                return;
+            }
+
+            const lat = place.geometry.location.lat();
+            const lon = place.geometry.location.lng();
+            const displayName = place.formatted_address || place.name || "";
+
+            onChange(displayName);
+            onSelect(lat, lon, displayName);
+            setError(null);
+        });
+
+        // Styling for the autocomplete dropdown is handled by Google, 
+        // but we can override class .pac-container in CSS if needed.
+
+    }, [onChange, onSelect]);
 
     return (
-        <div ref={wrapperRef} style={{ position: 'relative', width: '300px' }}>
+        <div style={{ position: 'relative', width: '300px' }}>
             <input
+                ref={inputRef}
                 type="text"
                 value={value}
-                onChange={(e) => {
-                    onChange(e.target.value);
-                    setIsOpen(true);
-                }}
-                onFocus={() => value.length > 2 && setIsOpen(true)}
-                placeholder={placeholder}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder || "Search location..."}
                 style={{
                     width: '100%',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    border: '1px solid #555',
-                    background: '#333',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.05)',
                     color: 'white',
-                    outline: 'none'
+                    outline: 'none',
+                    backdropFilter: 'blur(10px)',
+                    fontSize: '0.95rem'
                 }}
             />
-
-            {isOpen && (suggestions.length > 0 || isLoading) && (
-                <ul style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    background: '#2a2a2a',
-                    border: '1px solid #444',
-                    borderRadius: '0 0 4px 4px',
-                    listStyle: 'none',
-                    padding: 0,
-                    margin: 0,
-                    zIndex: 1000,
-                    maxHeight: '200px',
-                    overflowY: 'auto',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
-                }}>
-                    {isLoading && (
-                        <li style={{ padding: '10px', color: '#888' }}>Loading...</li>
-                    )}
-
-                    {!isLoading && suggestions.map((s) => (
-                        <li
-                            key={s.place_id}
-                            onClick={() => handleSelect(s)}
-                            style={{
-                                padding: '10px',
-                                borderBottom: '1px solid #333',
-                                cursor: 'pointer',
-                                fontSize: '0.9em',
-                                color: '#ddd',
-                                transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = '#444')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                        >
-                            {s.display_name}
-                        </li>
-                    ))}
-                </ul>
+            {error && (
+                <div style={{ color: '#ff6b6b', fontSize: '0.8rem', marginTop: '4px' }}>
+                    {error}
+                </div>
             )}
         </div>
     );

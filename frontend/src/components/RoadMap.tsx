@@ -1,10 +1,15 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import '../styles/map.css';
-import { divIcon } from 'leaflet';
-import { useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+    APIProvider,
+    Map,
+    AdvancedMarker,
+    InfoWindow,
+    useMap,
+    useMapsLibrary
+} from '@vis.gl/react-google-maps';
 import MapLegend from './MapLegend';
 import type { Junction } from '../types';
+import '../styles/map.css';
 
 interface RoadMapProps {
     junctions: Junction[];
@@ -12,134 +17,139 @@ interface RoadMapProps {
     onJunctionSelect: (id: number) => void;
 }
 
-// Helper to Recenter Map with smooth animation
-function RecenterMap({ activeJunctionId, junctions }: { activeJunctionId: number | null, junctions: Junction[] }) {
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+// --- Sub-components to access Map context ---
+
+const MapEffect = ({ activeJunctionId, junctions }: { activeJunctionId: number | null, junctions: Junction[] }) => {
     const map = useMap();
+
+    useEffect(() => {
+        if (!map || !activeJunctionId) return;
+
+        const junction = junctions.find(j => j.id === activeJunctionId);
+        if (junction) {
+            map.panTo({ lat: junction.latitude, lng: junction.longitude });
+            map.setZoom(16);
+            map.setTilt(45); // cool 3D effect
+        }
+    }, [map, activeJunctionId, junctions]);
+
+    return null;
+};
+
+const TrafficLayer = () => {
+    const map = useMap();
+    const maps = useMapsLibrary('maps');
+
+    useEffect(() => {
+        if (!map || !maps) return;
+        const trafficLayer = new maps.TrafficLayer();
+        trafficLayer.setMap(map);
+        return () => {
+            trafficLayer.setMap(null);
+        };
+    }, [map, maps]);
+
+    return null;
+};
+
+// --- Main Component ---
+
+export default function RoadMap({ junctions, activeJunctionId, onJunctionSelect }: RoadMapProps) {
+    const [selectedMarker, setSelectedMarker] = useState<Junction | null>(null);
+
+    // Update internal state when activeJunctionId changes from parent
     useEffect(() => {
         if (activeJunctionId) {
             const junction = junctions.find(j => j.id === activeJunctionId);
             if (junction) {
-                map.flyTo([junction.latitude, junction.longitude], 15, {
-                    duration: 1.5,
-                    easeLinearity: 0.25
-                });
+                setSelectedMarker(junction);
             }
         }
-    }, [activeJunctionId, junctions, map]);
-    return null;
-}
+    }, [activeJunctionId, junctions]);
 
-// Enhanced Custom Marker Icon
-const createCustomIcon = (status: string, isActive: boolean) => {
-    let statusClass = 'marker-offline';
-    if (status === 'active') statusClass = 'marker-active';
-    if (status === 'maintenance') statusClass = 'marker-maintenance';
+    // Default center (VIT-AP)
+    const defaultCenter = useMemo(() => {
+        if (junctions.length > 0) {
+            return { lat: junctions[0].latitude, lng: junctions[0].longitude };
+        }
+        return { lat: 16.490026, lng: 80.513759 }; // VIT-AP University
+    }, [junctions]);
 
-    const pulseClass = isActive ? 'marker-pulse marker-ripple' : '';
-    const size = isActive ? 24 : 20;
+    const handleMarkerClick = useCallback((junction: Junction) => {
+        setSelectedMarker(junction);
+        onJunctionSelect(junction.id);
+    }, [onJunctionSelect]);
 
-    return divIcon({
-        className: 'custom-marker',
-        html: `
-            <div class="marker-dot ${statusClass} ${pulseClass}" 
-                 style="width: ${size}px; height: ${size}px;">
+    if (!GOOGLE_MAPS_API_KEY) {
+        return (
+            <div className="map-error">
+                <h3>Google Maps API Key Missing</h3>
+                <p>Please add VITE_GOOGLE_MAPS_API_KEY to your .env file.</p>
             </div>
-        `,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
-        popupAnchor: [0, -size / 2]
-    });
-};
+        );
+    }
 
-// Enhanced Popup Content
-const createPopupContent = (junction: Junction, trafficData?: { vehicle_count?: number; congestion_level?: string }) => {
-    const statusClass = junction.status.toLowerCase();
-
-    return `
-        <div class="scale-in">
-            <div class="popup-title">${junction.name}</div>
-            <div class="popup-status ${statusClass}">${junction.status}</div>
-            ${trafficData ? `
-                <div class="popup-stats">
-                    <div class="popup-stat">
-                        <span class="popup-stat-label">Vehicles:</span>
-                        <span class="popup-stat-value">${trafficData.vehicle_count || 0}</span>
-                    </div>
-                    <div class="popup-stat">
-                        <span class="popup-stat-label">Congestion:</span>
-                        <span class="popup-stat-value">${trafficData.congestion_level || 'Unknown'}</span>
-                    </div>
-                </div>
-            ` : ''}
-        </div>
-    `;
-};
-
-export default function RoadMap({ junctions, activeJunctionId, onJunctionSelect }: RoadMapProps) {
-    // Calculate center based on junctions or use default
-    const calculateCenter = (): [number, number] => {
-        if (junctions.length === 0) {
-            return [40.730610, -73.935242]; // Default: New York
-        }
-
-        // If there's an active junction, center on it
-        const activeJunction = junctions.find(j => j.id === activeJunctionId);
-        if (activeJunction) {
-            return [activeJunction.latitude, activeJunction.longitude];
-        }
-
-        // Otherwise, center on first junction
-        return [junctions[0].latitude, junctions[0].longitude];
-    };
+    console.log('🗺️ RoadMap rendering with junctions:', junctions);
+    console.log('📍 Default center:', defaultCenter);
 
     return (
-        <div style={{
-            height: '100%',
-            width: '100%',
-            borderRadius: '16px',
-            overflow: 'hidden',
-            position: 'relative',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
-        }}>
-            <MapContainer
-                center={calculateCenter()}
-                zoom={13}
-                style={{ height: '100%', width: '100%' }}
-                scrollWheelZoom={true}
-                zoomControl={true}
-            >
-                <RecenterMap activeJunctionId={activeJunctionId} junctions={junctions} />
+        <div style={{ height: '100%', width: '100%', borderRadius: '16px', overflow: 'hidden', position: 'relative' }}>
+            <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['places', 'marker']}>
+                <Map
+                    defaultCenter={defaultCenter}
+                    defaultZoom={13}
+                    mapId="DEMO_MAP_ID"
+                    disableDefaultUI={false}
+                    zoomControl={true}
+                    mapTypeControl={false}
+                    streetViewControl={false}
+                    fullscreenControl={true}
+                    tilt={0}
+                    style={{ width: '100%', height: '100%' }}
+                >
+                    <TrafficLayer />
+                    <MapEffect activeJunctionId={activeJunctionId} junctions={junctions} />
 
-                {/* Dark Theme Tile Layer */}
-                <TileLayer
-                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                    maxZoom={19}
-                />
-
-                {/* Render Junction Markers */}
-                {junctions.map(junction => (
-                    <Marker
-                        key={junction.id}
-                        position={[junction.latitude, junction.longitude]}
-                        icon={createCustomIcon(junction.status, activeJunctionId === junction.id)}
-                        eventHandlers={{
-                            click: () => onJunctionSelect(junction.id),
-                        }}
-                    >
-                        <Popup
-                            closeButton={true}
-                            className="custom-popup"
+                    {junctions.map((junction) => (
+                        <AdvancedMarker
+                            key={junction.id}
+                            position={{ lat: junction.latitude, lng: junction.longitude }}
+                            onClick={() => handleMarkerClick(junction)}
+                            title={junction.name}
                         >
-                            <div dangerouslySetInnerHTML={{
-                                __html: createPopupContent(junction)
-                            }} />
-                        </Popup>
-                    </Marker>
-                ))}
-            </MapContainer>
+                            {/* Custom Marker UI - Calculate class based on status/traffic */}
+                            <div className={`custom-marker-pin ${junction.status.toLowerCase()} ${junction.status === 'active'
+                                ? ((junction as any).vehicle_count > 20 ? 'high' : 'low')
+                                : ''
+                                } ${activeJunctionId === junction.id ? 'selected' : ''}`}>
+                                <div className="marker-core" />
+                                <div className="marker-pulse" />
+                            </div>
+                        </AdvancedMarker>
+                    ))}
 
-            {/* Floating Legend */}
+                    {selectedMarker && (
+                        <InfoWindow
+                            position={{ lat: selectedMarker.latitude, lng: selectedMarker.longitude }}
+                            onCloseClick={() => setSelectedMarker(null)}
+                            headerContent={<div className="info-window-header">{selectedMarker.name}</div>}
+                        >
+                            <div className="info-window-content">
+                                <div className={`status-badge ${selectedMarker.status.toLowerCase()}`}>
+                                    {selectedMarker.status}
+                                </div>
+                                <div className="stats-row">
+                                    <span>Signal:</span>
+                                    <strong>Red</strong>
+                                </div>
+                            </div>
+                        </InfoWindow>
+                    )}
+                </Map>
+            </APIProvider>
+
             <MapLegend />
         </div>
     );
