@@ -15,13 +15,23 @@ This project has **two separate components**:
 
 ### 1. Deploy Frontend to Vercel
 
-The `vercel.json` configuration is already set up. Just push to GitHub and Vercel will auto-deploy.
+The `vercel.json` configuration is already set up in the project root.
 
+**Option A: Deploy via Vercel Dashboard**
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click "Add New Project"
+3. Import your GitHub repository
+4. Vercel will auto-detect the configuration
+5. Click "Deploy"
+
+**Option B: Deploy via Git Push**
 ```bash
 git add .
 git commit -m "Add Vercel configuration"
 git push
 ```
+
+Vercel will automatically deploy when you push to your main branch.
 
 ### 2. Configure Environment Variables in Vercel
 
@@ -34,8 +44,8 @@ Go to your Vercel project settings and add these environment variables:
 
 **Steps:**
 1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables
-2. Add both variables
-3. Redeploy the project
+2. Add both variables for all environments (Production, Preview, Development)
+3. Redeploy the project (Deployments tab → Redeploy)
 
 ### 3. Update Supabase CORS Settings
 
@@ -112,9 +122,10 @@ Vercel is designed for serverless functions and static sites. The Python worker:
 ## Deployment Checklist
 
 - [x] Created `vercel.json` configuration
+- [x] Added environment validation
 - [ ] Push to GitHub
-- [ ] Connect GitHub repo to Vercel
-- [ ] Add environment variables in Vercel
+- [ ] Connect GitHub repo to Vercel (or use Vercel CLI)
+- [ ] Add environment variables in Vercel dashboard
 - [ ] Deploy and test frontend
 - [ ] Update Supabase CORS settings
 - [ ] Run worker separately on local machine/server

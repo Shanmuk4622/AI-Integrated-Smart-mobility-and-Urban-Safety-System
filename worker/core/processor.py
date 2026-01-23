@@ -79,28 +79,42 @@ class PlateSmoother:
 # --- WORKER CLASS ---
 
 class JunctionProcessor:
-    def __init__(self, junction_id: int, video_source: str, coco_model_path: str, lp_model_path: str, config_module=None):
+    def __init__(self, junction_id: int, video_source: str, coco_model_path: str, lp_model_path: str, config_module=None, logger=None):
         self.junction_id = junction_id
         self.video_source = video_source
         self.config = config_module
+        self.logger = logger  # Store logger instance
         
         # Initialize Supabase
         self.db = SupabaseService()
         
         # Models
-        print(f"Loading Models for Junction {junction_id}...")
+        if self.logger:
+            self.logger.info(f"Loading Models for Junction {junction_id}...")
+        else:
+            print(f"Loading Models for Junction {junction_id}...")
+            
         self.coco_model = YOLO(coco_model_path)
         self.lp_model = YOLO(lp_model_path)
         
         if torch.cuda.is_available():
             self.coco_model.to('cuda')
             self.lp_model.to('cuda')
-            print("Using GPU")
+            if self.logger:
+                self.logger.info("Using GPU")
+            else:
+                print("Using GPU")
         else:
-            print("Using CPU")
+            if self.logger:
+                self.logger.info("Using CPU")
+            else:
+                print("Using CPU")
         
         # Initialize EasyOCR after YOLO models to prevent CUDA conflicts
-        print("Initializing EasyOCR...")
+        if self.logger:
+            self.logger.info("Initializing EasyOCR...")
+        else:
+            print("Initializing EasyOCR...")
         self.reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available())
         
         # Initialize SORT Tracker
@@ -122,7 +136,11 @@ class JunctionProcessor:
                  raise ValueError(f"Could not open video source: {self.video_source}")
                  
         if not self.cap.isOpened():
-             print(f"ERROR: Failed to open source {self.video_source}")
+            error_msg = f"Failed to open source {self.video_source}"
+            if self.logger:
+                self.logger.error(error_msg)
+            else:
+                print(f"ERROR: {error_msg}")
 
         # Configurable Output
         self.out = None
@@ -133,7 +151,10 @@ class JunctionProcessor:
             
             output_path = os.path.join(self.config.OUTPUT_DIR, f"processed_j{self.junction_id}_{int(time.time())}.mp4")
             self.out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
-            print(f"Recursive Recording logic enabled. Saving to: {output_path}")
+            if self.logger:
+                self.logger.info(f"Recording enabled. Saving to: {output_path}")
+            else:
+                print(f"Recursive Recording logic enabled. Saving to: {output_path}")
 
         # State
         self.wrong_way_violations = []
@@ -185,11 +206,17 @@ class JunctionProcessor:
         return None, None
 
     def start(self):
-        print(f"Junction {self.junction_id}: Processing started.")
+        if self.logger:
+            self.logger.info(f"Junction {self.junction_id}: Processing started.")
+        else:
+            print(f"Junction {self.junction_id}: Processing started.")
         while self.cap.isOpened():
             ret, frame = self.cap.read()
             if not ret:
-                print("End of stream, restarting...")
+                if self.logger:
+                    self.logger.warning("End of stream, restarting...")
+                else:
+                    print("End of stream, restarting...")
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 continue
 
@@ -310,7 +337,10 @@ class JunctionProcessor:
                     avg_speed=0 # Placeholder
                 )
                 self.last_log_time = time.time()
-                print(f"[Junction {self.junction_id}] Synced: Density={current_lane_density}, Signal={signal_status['action']}")
+                if self.logger:
+                    self.logger.debug(f"Synced: Density={current_lane_density}, Signal={signal_status['action']}")
+                else:
+                    print(f"[Junction {self.junction_id}] Synced: Density={current_lane_density}, Signal={signal_status['action']}")
 
             # --- VISUALIZATION & OUTPUT ---
             # Only draw if we need to Show GUI or Save Video
@@ -363,20 +393,29 @@ class JunctionProcessor:
                 if self.config.SHOW_GUI:
                     cv2.imshow(f"Worker {self.junction_id}", frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
-                        print("Stop signal received.")
+                        if self.logger:
+                            self.logger.info("Stop signal received.")
+                        else:
+                            print("Stop signal received.")
                         break
         
         # Cleanup
         self.stop()
         
     def stop(self):
-        print("Stopping Worker...")
+        if self.logger:
+            self.logger.info("Stopping Worker...")
+        else:
+            print("Stopping Worker...")
         # 1. Update DB Status
         try:
             if self.config:
                 self.db.update_status(self.junction_id, "offline")
         except Exception as e:
-            print(f"Error during shutdown sync: {e}")
+            if self.logger:
+                self.logger.error(f"Error during shutdown sync: {e}")
+            else:
+                print(f"Error during shutdown sync: {e}")
 
         # 2. Release Resources
         if self.out:
@@ -384,4 +423,7 @@ class JunctionProcessor:
         if self.cap:
              self.cap.release()
         cv2.destroyAllWindows()
-        print("Worker Stopped Cleanly.")
+        if self.logger:
+            self.logger.info("Worker Stopped Cleanly.")
+        else:
+            print("Worker Stopped Cleanly.")
