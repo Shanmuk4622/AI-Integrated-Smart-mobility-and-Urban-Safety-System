@@ -19,7 +19,7 @@ export function useAdminAuth() {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session) {
-                verifyAdminRole(session.user.id, session.user.email!);
+                verifyAdminRole(session.user.email!);
             } else {
                 setAdmin(null);
                 setLoading(false);
@@ -36,14 +36,14 @@ export function useAdminAuth() {
                 setLoading(false);
                 return;
             }
-            await verifyAdminRole(session.user.id, session.user.email!);
+            await verifyAdminRole(session.user.email!);
         } catch (error) {
             console.error("Auth check failed:", error);
             setLoading(false);
         }
     }
 
-    async function verifyAdminRole(authUserId: string, email: string) {
+    async function verifyAdminRole(email: string) {
         try {
             // Logic: Check if this email exists in 'admin_users'
             // Note: In a production app, we should link auth.uid to admin_users.id
