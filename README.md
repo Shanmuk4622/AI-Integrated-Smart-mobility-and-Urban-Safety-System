@@ -1,164 +1,172 @@
-# Smart Mobility & Urban Safety System 🚦
+# 🚦 AI-Integrated Smart Mobility & Urban Safety System
 
-![Status](https://img.shields.io/badge/Status-Active-success)
-![Tech](https://img.shields.io/badge/Stack-Python%20%7C%20React%20%7C%20Supabase%20%7C%20YOLOv8-blue)
+[![Live Demo](https://img.shields.io/badge/demo-online-green.svg)](https://smart-mobility-and-urban-safety-sys.vercel.app/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
+![React](https://img.shields.io/badge/react-18+-61DAFB.svg)
+![Supabase](https://img.shields.io/badge/supabase-backend-3ECF8E.svg)
+![YOLOv8](https://img.shields.io/badge/YOLO-v8-FF0000.svg)
 
-**A scalable, AI-powered system for real-time traffic monitoring, management, and violation detection.**
-This system utilizes distributed "Edge Workers" to process video feeds at traffic junctions and syncs live analytics to a centralized Cloud Dashboard for city officials.
+> **A scalable, AI-powered system for real-time traffic monitoring, intelligent signal control, and automated violation detection.**
+
+This project leverages distributed **Edge AI (Worker Nodes)** to process video feeds at traffic junctions and synchronizes data with a centralized **Cloud Dashboard** for city-wide traffic management.
+
+---
+
+## 📸 System Previews
+
+### 1. Admin Dashboard
+Comprehensive view of city traffic, active junctions, and real-time statistics.
+![Admin Dashboard](worker/images/adminDashboard2.png)
+
+### 2. Intelligent Junction Monitoring
+Deep dive into specific junctions with live video feeds, real-time vehicle counting, and congestion heatmaps.
+![Junction Monitor](worker/images/adminJunctionInside.png)
+
+### 3. Smart Route Planning (User View)
+The public-facing route planner that adapts to real-time congestion levels.
+**Before Congestion:**
+![Route Planner Normal](worker/images/homeBeforeConjuction.png)
+**After Congestion Detected (Auto-Rerouting):**
+![Route Planner Rerouting](worker/images/homeAfterConjuction.png)
 
 ---
 
 ## 🏗️ System Architecture
 
-```mermaid
-graph TD
-    %% Styling
-    classDef edge fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef cloud fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef user fill:#bfb,stroke:#333,stroke-width:2px;
+The system follows a **Hybrid Edge-Cloud Architecture**:
 
-    subgraph Edge_Layer ["📷 Edge Layer (Python Workers)"]
-        Camera[("🎥 CCTV Feed")] --> Worker["🖥️ AI Worker Node<br/>(YOLOv8 + OpenCV)"]
-        Worker -->|Detects| Logic["🧠 Logic: Congestion, Speed, Violation"]
-    end
+1.  **Edge Layer (Worker Nodes)**:
+    *   **Technology**: Python, YOLOv8, OpenCV, SORT Tracker.
+    *   **Role**: Deployed at physical junctions. They process raw video locally to extract structured data (vehicle counts, speeds, violations) and upload compressed snapshots.
+    *   **Privacy**: Only metadata and violation evidence are stored; raw video streams are processed on-the-fly.
 
-    subgraph Backend_Layer ["☁️ Cloud Backend (Supabase)"]
-        Logic -->|Sync Data| DB[("🗄️ Database")]
-        Logic -->|Upload Media| Storage["📦 Storage"]
-        DB -->|Realtime Push| Frontend
-    end
+2.  **Cloud Layer (Supabase)**:
+    *   **Technology**: PostgreSQL, Realtime Subscriptions, Storage Buckets.
+    *   **Role**: Acts as the central nervous system, syncing state between workers and the dashboard in milliseconds.
 
-    subgraph Frontend_Layer ["💻 Dashboard (React)"]
-        Frontend -->|Admin Panel| Admin["🛡️ Admin Controls"]
-        Frontend -->|Public Map| Map["🗺️ Public Traffic Map"]
-    end
-```
+3.  **Application Layer (Frontend)**:
+    *   **Technology**: React, Vite, Google Maps API, Recharts.
+    *   **Role**: Provides interfaces for both Administrators (Traffic Control Center) and Citizens (Smart Route Planner).
 
 ---
 
-## 🔄 How It Works (Workflow)
+## 🧩 Key Features
 
-### 1. The Edge Worker (The "Eyes")
-*   **Input**: The Python script (`worker/`) connects to a CCTV camera or video file.
-*   **Processing**:
-    *   **YOLOv8** detects vehicles (Car, Truck, Bus, Motorcycle).
-    *   **SORT Tracker** assigns a unique ID to each vehicle to track its path.
-    *   **Logic Engine** calculates speed (pixels/frame), checks for red-light violations, and detects ambulances.
-*   **Sync**: Every few seconds, it sends a summary (Traffic Density, Speed) to **Supabase**. If a violation occurs, it uploads the image immediately.
+### 🛡️ For Administrators (Traffic Control)
+*   **Live Surveillance**: View real-time snapshots (1 FPS) from any connected junction.
+*   **Automated Violation Detection**:
+    *   **Wrong Way Driving**: Detects vehicles moving against traffic flow.
+    *   **Over Speeding**: Identifies vehicles exceeding speed limits.
+    *   **Deep Evidence**: Captures high-res cropped images of violations with license plates.
+    ![Violation Detection](worker/images/boundingBoxWithNumberPlate.png)
+*   **Challan Management**: Workflow to review, approve, or reject automated citations.
+![Challan System](worker/images/adminChallan.png)
+*   **Analytics**: Historical data trends for traffic volume and revenue estimation.
+![Analytics](worker/images/adminAnalysis.png)
 
-### 2. The Cloud (The "Brain")
-*   **Supabase** acts as the central hub.
-*   **Database**: Stores `traffic_logs`, `violations`, and `junctions` metadata.
-*   **Realtime**: Instantly broadcasts updates (via WebSockets) to anyone viewing the map.
+### 🚗 For Citizens (Commuters)
+*   **Smart Navigation**: Route suggestions that realistically account for current junction congestion levels.
+*   **Congestion Awareness**: Visual indicators for high-traffic zones.
 
-### 3. The Frontend (The "Face")
-*   **Public Map**: Users see live traffic congestion (Red/Green lines) based on real-time data.
-*   **Admin Dashboard**: City officials monitor the health of every junction (FPS, CPU) and review violations.
-
----
-
-## ✨ Key Features
-
-### 🧠 Edge AI (Python Workers)
-*   **Vehicle Counting:** Real-time counting of Cars, Buses, Trucks, Motorcycles.
-*   **Speed Estimation:** Pixel-distance mapping to estimate flow speed.
-*   **Violation Detection:** Automatically flags **Red Light Violations** and **Wrong-Way Driving**.
-*   **Emergency Priority:** Detects **Ambulances** and triggers alert events.
-
-### 💻 Frontend Dashboard (React + Vite)
-*   **Live Traffic Map:** Google Maps integration showing real-time congestion (Blue=Low, Red=High).
-*   **Smart Rerouting:** Automatically calculates alternative routes when congestion is detected.
-*   **Admin Panel:**
-    *   Secure Login with RBAC (Role-Based Access Control).
-    *   Junction Management (Configure workers remotely).
-    *   Violation Review System (Approve/Reject challans).
+### 📱 Mobile Application (Citizen App)
+*   **Companion App**: A dedicated mobile application for citizens to receive traffic alerts and navigate.
+*   **Source Code**: Available at [xeyynon/TUA](https://github.com/xeyynon/TUA).
 
 ---
 
 ## 📂 Project Structure
 
-| Directory | Description |
-| :--- | :--- |
-| **[`frontend/`](./frontend)** | The React Application (Public Map + Admin Panel + Route Planner). |
-| **[`worker/`](./worker)** | Python Edge Code. Runs YOLOv8 inference and communicates with Supabase. |
-| **[`database/`](./database)** | SQL Schemas (`admin_schema.sql`) and Admin Setup Scripts. |
-| **[`legacy/`](./legacy)** | Archived backend server (FastAPI), kept for reference. |
-| **[`docs/`](./docs)** | Detailed documentation updates. |
-| **[`scripts/`](./scripts)** | Batch scripts for dependency installation. |
+```bash
+📦 Root
+├── 📂 frontend/             # React Application (Vite)
+│   ├── 📂 src/
+│   │   ├── 📂 admin/       # Admin Panel Components (Dashboard, Violations, etc.)
+│   │   ├── 📂 pages/       # Public Pages (Route Planner)
+│   │   └── key_components  # common UI elements
+│   └── ...
+│
+├── 📂 worker/               # Python Edge Worker
+│   ├── 📂 core/            # AI Logic (YOLO, Tracker, Rules)
+│   ├── 📂 services/        # Supabase Communication
+│   ├── 📂 sort/            # SORT Tracking Algorithm
+│   ├── 📂 images/          # Documentation Assets & Screens
+│   ├── config.py           # Worker Configuration (Junction ID, Source)
+│   └── processor.py        # Main Processing Loop
+│
+├── 📂 database/             # SQL Scripts
+│   ├── admin_schema.sql    # Main Database Setup
+│   └── ...                 # Utility scripts
+│
+└── 📂 backend/              # (Legacy) FastAPI service
+```
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 Getting Started
 
-### 1. Database Setup (Supabase)
-To run this project, you need a Supabase project.
-1.  Go to the **[`database/`](./database)** folder.
-2.  Run **`admin_schema.sql`** in your Supabase SQL Editor to create tables.
-3.  Run **`fix_admin_rls.sql`** to apply security policies.
-4.  (*Optional*) Run **`add_admin_user.sql`** to grant yourself Admin access.
+### Prerequisites
+*   **Python 3.9+** (Telemtry & Vision)
+*   **Node.js 18+** (Dashboard)
+*   **Supabase Account** (Database)
 
-### 2. Configure Environment
-Create a `.env` file in the root or `worker/` directory:
-```ini
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
-```
+### 1. Worker Setup (The "Edge")
+The worker simulates a camera feed processing unit.
 
-### 3. Start the Edge Worker
-Simulate a traffic junction processing video:
-```powershell
-.\run_worker.bat
-```
-*The worker will start processing `sample.mp4` and syncing data.*
-
-### 4. Start the Dashboard
-Launch the web interface:
-```powershell
-cd frontend
-npm run dev
-```
-> Access: `http://localhost:5173`
-> Admin Login: `http://localhost:5173/admin/login`
-
----
-
-## 🛠️ How to Add a New Junction
-
-You can simulate multiple traffic nodes by running multiple workers or simply changing the configuration.
-
-1.  Open **`worker/config.py`**.
-2.  Change the **Identity**:
+1.  Navigate to `worker/`:
+    ```bash
+    cd worker
+    ```
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+3.  Configure `config.py` (Set your video file and ID):
     ```python
-    JUNCTION_ID = 5           # Give it a unique number
-    LOCATION_NAME = "My New Road"
-    LATITUDE = 17.456        # Set coordinates
-    LONGITUDE = 78.456
+    JUNCTION_ID = 5
+    VIDEO_SOURCE = "Videos/sample.mp4"
     ```
-3.  (Optional) Tune Calibration:
-    ```python
-    SPEED_CALCULATION_FPS = 30 # Match your video FPS
+4.  Run the worker:
+    ```bash
+    python main.py
+    # or use the batch script:
+    ..\run_worker.bat
     ```
-4.  **Run the Worker**:
-    ```powershell
-    .\run_worker.bat
+
+### 2. Frontend Setup (The "Cloud Dashboard")
+1.  Navigate to `frontend/`:
+    ```bash
+    cd frontend
     ```
-5.  **Result**: The new junction automatically appears on the **Admin Dashboard** and **Public Map**! 🚀
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+3.  Start the development server:
+    ```bash
+    npm run dev
+    ```
+4.  Open `http://localhost:5173` to see the Route Planner.
+5.  Access Admin Panel via the **Menu (Top-Left)** or at `http://localhost:5173/admin/login`.
 
 ---
 
-## 🛡️ Admin Access
-The Admin Panel is protected. To log in:
-1.  Create a user in Supabase Authentication.
-2.  Run the **`database/add_admin_user.sql`** script to link that user to the `super_admin` role.
-3.  Login with your email/password.
+## 🧠 AI Methodology
+
+### Vehicle Detection & Tracking
+*   **Model**: YOLOv8n (Nano) is used for high-speed, low-latency detection suitable for edge devices.
+*   **Tracking**: SORT (Simple Online and Realtime Tracking) assigns unique IDs to vehicles to track their trajectory across frames.
+
+### Speed & Violation Logic
+*   **Speed Estimation**: Calculated using **Pixels-Per-Meter (PPM)** mapping. By measuring the pixel displacement of a tracked vehicle over time, we estimate physical speed.
+*   **Wrong Way**: We analyze the vector direction of the vehicle track. If `dy` (vertical movement) opposes the lane direction by a significant threshold (e.g., >20px), a violation is flagged.
+
+### Emergency Vehicle Priority
+*   **Detection**: A specialized logic checks for specific vehicle classes (Ambulance/Fire Truck) or color patterns.
+*   **Action**: The system logs the event with high priority, intended to trigger "Green Corridor" signal changes (simulated in logs).
 
 ---
 
-## 🤝 Technology Stack
-*   **Frontend Check**: React 19, Tailwind CSS (v3), Google Maps API, Recharts.
-*   **Backend**: Supabase (PostgreSQL 15, Realtime, Storage).
-*   **AI/ML**: Python 3.9+, YOLOv8 (Ultralytics), OpenCV, PyTorch.
+## 🛡️ License
 
----
-
-*© 2026 Smart Mobility Team*
+This project is open-source and available under the [MIT License](LICENSE).

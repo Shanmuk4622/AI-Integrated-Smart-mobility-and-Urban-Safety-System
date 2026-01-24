@@ -5,17 +5,19 @@ import os
 # ==========================================
 
 # 1. Identity
-JUNCTION_ID = 5  # UPDATED
-LOCATION_NAME = "Hydrabad route" # UPDATED
+JUNCTION_ID = 4  # UPDATED
+LOCATION_NAME = "Secritari area" # UPDATED
 
 # GEOGRAPHIC COORDINATES (Decimal Degrees)
-LATITUDE = 17.425069191493133
-LONGITUDE = 78.4861838264351
+# LATITUDE = 17.425069191493133
+# LONGITUDE = 78.4861838264351
+LATITUDE = 16.508131151568424
+LONGITUDE = 80.51599164231466
 
 # 2. Input
 # Path to video file OR RTSP Stream URL
 # Example: "rtsp://username:password@ip:port/stream"
-VIDEO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Videos", "sample3.mp4")
+VIDEO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Videos", "sample.mp4")
 
 # 3. Models
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
