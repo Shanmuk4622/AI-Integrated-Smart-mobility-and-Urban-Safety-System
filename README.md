@@ -1,4 +1,4 @@
-# 🚦 AI-Integrated Smart Mobility & Urban Safety System
+# 🚦Flow-IQ (AI-Integrated Smart Mobility & Urban Safety System)
 
 [![Live Demo](https://img.shields.io/badge/demo-online-green.svg)](https://smart-mobility-and-urban-safety-sys.vercel.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -10,6 +10,12 @@
 > **A scalable, AI-powered system for real-time traffic monitoring, intelligent signal control, and automated violation detection.**
 
 ![Junction Monitor](worker/images/allApplication.jpeg)
+
+## 📺 Demo Video
+
+[![Demo Video](https://img.youtube.com/vi/XGHO07l-3YY/0.jpg)](https://youtu.be/XGHO07l-3YY)
+
+
 
 This project leverages distributed **Edge AI (Worker Nodes)** to process video feeds at traffic junctions and synchronizes data with a centralized **Cloud Dashboard** for city-wide traffic management.
 
