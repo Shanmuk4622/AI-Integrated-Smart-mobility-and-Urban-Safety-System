@@ -210,6 +210,9 @@ class JunctionProcessor:
         
         self.traffic_controller = TrafficController()
         
+        # Ensure violations bucket exists (idempotent-ish check via exception handling not feasible here easily, 
+        # relying on SQL script but good to log)
+        
         self.cap = cv2.VideoCapture(self.video_source)
         if not self.cap.isOpened():
              # Try opening as int if it's a number (webcam)
@@ -553,6 +556,8 @@ class JunctionProcessor:
                 # Helper cleanup (1% chance per scan to act as 'cron')
                 if self.frame_count % 100 == 0:
                      self.db.cleanup_old_snapshots(self.junction_id)
+                     # Cleanup violations older than 1 day (86400 seconds)
+                     self.db.cleanup_old_violations(self.junction_id, max_age_seconds=86400)
 
             self.frame_count += 1
 

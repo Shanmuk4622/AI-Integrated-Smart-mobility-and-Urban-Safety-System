@@ -300,15 +300,18 @@ export default function JunctionMonitor() {
                         <div className="monitor-card-body" style={{ padding: 0 }}>
                             <div className="video-container">
                                 {liveFeedUrl ? (
+                                    /* Double buffer or just simple img without key to prevent flickering */
                                     <img
                                         src={liveFeedUrl}
                                         alt="Live Feed"
                                         className="w-full h-full object-contain"
-                                        key={liveFeedUrl} // Force re-render on new URL
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1494587416117-f101a292419d?q=80&w=1000&auto=format&fit=crop';
+                                        }}
                                     />
                                 ) : (
                                     <>
-                                        <div className="absolute insect-0 flex items-center justify-center text-gray-500 z-0">
+                                        <div className="absolute inset-0 flex items-center justify-center text-gray-500 z-0">
                                             <p>Waiting for feed...</p>
                                         </div>
                                         <img
@@ -318,6 +321,7 @@ export default function JunctionMonitor() {
                                         />
                                     </>
                                 )}
+
                                 <div className="video-overlay">
                                     <div className="video-badge">
                                         <Camera size={12} className="mr-1" /> Camera 1
@@ -445,6 +449,6 @@ export default function JunctionMonitor() {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

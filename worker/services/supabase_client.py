@@ -334,3 +334,41 @@ class SupabaseService:
                 
         except Exception as e:
             print(f"ERROR: Cleanup failed: {e}")
+
+    def cleanup_old_violations(self, junction_id: int, max_age_seconds: int = 86400):
+        """
+        Deletes violation images older than max_age_seconds (default 1 day).
+        This assumes violation images are stored in 'violations' bucket with a timestamp in the name.
+        """
+        try:
+            # List files
+            folder = f"junction_{junction_id}"
+            files = self.supabase.storage.from_("violations").list(folder)
+            
+            now = time.time()
+            to_remove = []
+            
+            for f in files:
+                try:
+                    name = f['name']
+                    # Name format: YYYYMMDD_HHMMSS_ID.jpg
+                    # Parse timestamp from name
+                    date_part = name.split('_')[0] + name.split('_')[1] # YYYYMMDDHHMMSS
+                    # Convert to unix timestamp
+                    dt = datetime.strptime(date_part, "%Y%m%d%H%M%S")
+                    ts = dt.timestamp()
+                    
+                    if now - ts > max_age_seconds:
+                        to_remove.append(f"{folder}/{name}")
+                except Exception:
+                    # If format doesn't match or other error, skip
+                    pass
+            
+            if to_remove:
+                self.supabase.storage.from_("violations").remove(to_remove)
+                print(f"DEBUG: Cleaned up {len(to_remove)} old violation images for Junction {junction_id}")
+                
+        except Exception as e:
+            # Bucket might not exist or other error, suppress to avoid log spam if empty
+            # print(f"ERROR: Violation cleanup failed: {e}")
+            pass
