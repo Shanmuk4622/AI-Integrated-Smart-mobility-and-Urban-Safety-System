@@ -68,7 +68,7 @@ export default function Violations() {
 
     // Real-time subscription for new violations
     useEffect(() => {
-        const unsubscribe = subscribeToViolations((newViolation) => {
+        const unsubscribe = subscribeToViolations(() => {
             // New violation detected
             setNewViolationAlert(true);
             // Auto-refresh if viewing pending
