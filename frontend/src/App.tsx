@@ -11,6 +11,7 @@ import Violations from './admin/pages/Violations';
 import Challans from './admin/pages/Challans';
 import Analytics from './admin/pages/Analytics';
 import Settings from './admin/pages/Settings';
+import JunctionMonitor from './admin/pages/JunctionMonitor';
 import './App.css';
 
 // Layout for the main/public view
@@ -56,6 +57,7 @@ function App() {
           <Route path="challans" element={<Challans />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="monitor/:id" element={<JunctionMonitor />} />
         </Route>
       </Routes>
     </Router>
@@ -63,4 +65,3 @@ function App() {
 }
 
 export default App;
-

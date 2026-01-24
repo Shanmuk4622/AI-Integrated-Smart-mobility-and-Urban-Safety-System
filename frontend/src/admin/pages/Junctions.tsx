@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Activity, Signal, Cpu, Video, Disc, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface Junction {
     id: number;
@@ -27,6 +28,7 @@ export default function Junctions() {
     const [junctions, setJunctions] = useState<Junction[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const navigate = useNavigate();
 
     const fetchJunctions = async () => {
         try {
@@ -120,7 +122,11 @@ export default function Junctions() {
                     const statusColor = getStatusColor(node.status, health?.last_heartbeat);
 
                     return (
-                        <div key={node.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                        <div
+                            key={node.id}
+                            onClick={() => navigate(`/admin/monitor/${node.id}`)}
+                            className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all cursor-pointer hover:border-blue-300 ring-offset-2 hover:ring-2 hover:ring-blue-100"
+                        >
                             {/* Header */}
                             <div className="p-5 border-b border-gray-50 flex items-start justify-between">
                                 <div>
