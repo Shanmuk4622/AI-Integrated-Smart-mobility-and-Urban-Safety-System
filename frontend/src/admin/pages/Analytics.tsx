@@ -86,8 +86,6 @@ export default function Analytics() {
                 console.error('Traffic logs error:', trafficError);
             }
 
-            console.log('📊 Traffic logs fetched:', trafficLogs?.length || 0);
-
             // Process hourly stats
             const hourlyMap = new Map<number, { total: number; count: number }>();
             trafficLogs?.forEach(log => {

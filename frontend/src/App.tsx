@@ -1,8 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, Outlet } from 'react-router-dom';
-import AdminDashboard from './pages/AdminDashboard';
-import UserView from './pages/UserView';
 import RoutePlanner from './pages/RoutePlanner';
-import ViolationsSimple from './pages/ViolationsSimple';
 import AdminLayout from './admin/layouts/AdminLayout';
 import AdminLogin from './admin/pages/AdminLogin';
 import NewAdminDashboard from './admin/pages/AdminDashboard';
@@ -14,21 +11,10 @@ import Settings from './admin/pages/Settings';
 import JunctionMonitor from './admin/pages/JunctionMonitor';
 import './App.css';
 
-// Layout for the main/public view
+// Main Layout (Minimal)
 const MainLayout = () => (
-  <div className="app-container">
-    <nav className="sidebar">
-      <div className="logo-area">Smart City Layout</div>
-      <div className="nav-links">
-        <Link to="/" className="nav-item">Dashboard</Link>
-        <Link to="/user" className="nav-item">User Map</Link>
-        <Link to="/violations" className="nav-item">Violations</Link>
-        <Link to="/route" className="nav-item" style={{ border: '1px solid #4facfe', color: '#4facfe' }}>Route Planner</Link>
-        <Link to="/admin/login" className="nav-item" style={{ marginTop: 'auto', color: '#666', fontSize: '0.8em' }}>Admin Control</Link>
-      </div>
-    </nav>
-
-    <main className="content-area">
+  <div className="app-container" style={{ margin: 0, padding: 0 }}>
+    <main className="content-area" style={{ flex: 1, padding: 0, overflow: 'hidden' }}>
       <Outlet />
     </main>
   </div>
@@ -40,13 +26,10 @@ function App() {
       <Routes>
         {/* Main Routes */}
         <Route element={<MainLayout />}>
-          <Route path="/" element={<AdminDashboard />} />
-          <Route path="/user" element={<UserView />} />
-          <Route path="/violations" element={<ViolationsSimple />} />
-          <Route path="/route" element={<RoutePlanner />} />
+          <Route path="/" element={<RoutePlanner />} />
         </Route>
 
-        {/* New Admin Routes */}
+        {/* Admin Routes */}
         <Route path="/admin/login" element={<AdminLogin />} />
 
         <Route path="/admin" element={<AdminLayout />}>

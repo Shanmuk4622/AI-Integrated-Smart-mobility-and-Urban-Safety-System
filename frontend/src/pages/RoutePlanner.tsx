@@ -303,11 +303,49 @@ export default function RoutePlanner() {
         }
     }, [junctions]);
 
+    const [showMenu, setShowMenu] = useState(false); // Menu State
+
     if (!GOOGLE_MAPS_API_KEY) return <div>Missing API Key</div>;
 
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '15px', background: '#1a1a1a', color: 'white', display: 'flex', gap: '20px', borderBottom: '2px solid #333' }}>
+            <div style={{ padding: '15px', background: '#1a1a1a', color: 'white', display: 'flex', gap: '20px', borderBottom: '2px solid #333', alignItems: 'center' }}>
+
+                {/* 3-Dots Menu */}
+                <div style={{ position: 'relative' }}>
+                    <button
+                        onClick={() => setShowMenu(!showMenu)}
+                        style={{
+                            background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '8px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
+                            transition: 'background 0.2s',
+                            width: '32px', height: '32px'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.color = 'white'}
+                        onMouseOut={(e) => e.currentTarget.style.color = '#888'}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
+                    </button>
+
+                    {showMenu && (
+                        <div style={{
+                            position: 'absolute', top: '100%', left: '0', marginTop: '8px',
+                            background: '#222', border: '1px solid #444', borderRadius: '8px',
+                            minWidth: '150px', zIndex: 2000, boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                        }}>
+                            <a href="/admin/login" style={{
+                                display: 'block', padding: '12px 16px', color: '#e0e0e0', textDecoration: 'none', fontSize: '0.9em',
+                                transition: 'background 0.2s'
+                            }}
+                                onMouseOver={(e) => e.currentTarget.style.background = '#333'}
+                                onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                                Admin Control
+                            </a>
+                        </div>
+                    )}
+                </div>
+
                 <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '0.75em', color: '#888', marginBottom: '4px' }}>From:</div>
                     <LocationAutocomplete
