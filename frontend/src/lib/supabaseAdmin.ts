@@ -344,3 +344,211 @@ export function subscribeToViolationUpdates(
         supabase.removeChannel(channel);
     };
 }
+
+// ============================================
+// DASHBOARD DATA
+// ============================================
+
+export interface DashboardStats {
+    totalChallans: number;
+    revenueCollected: number;
+    pendingAmount: number;
+    activeJunctions: number;
+    pendingViolations: number;
+    vehiclesToday: number;
+    emergencyAlerts: number;
+}
+
+export interface JunctionWithTraffic {
+    id: number;
+    name: string;
+    latitude: number;
+    longitude: number;
+    status: string;
+    currentVehicleCount: number;
+    congestionLevel: 'Low' | 'Medium' | 'High';
+    recentViolations: number;
+    lastUpdate: string;
+}
+
+export interface TrafficDataPoint {
+    timestamp: string;
+    vehicleCount: number;
+}
+
+/**
+ * Fetch comprehensive dashboard statistics
+ */
+export async function getDashboardStats(): Promise<DashboardStats> {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Parallel fetch all stats
+        const [
+            citationsResult,
+            violationsResult,
+            junctionsResult,
+            trafficResult,
+            emergencyResult
+        ] = await Promise.all([
+            // Get citations stats
+            supabase.from('citations').select('fine_amount, paid'),
+            // Get pending violations
+            supabase.from('violations').select('id, status').or('status.eq.pending,status.is.null'),
+            // Get active junctions
+            supabase.from('junctions').select('id, status').eq('status', 'active'),
+            // Get today's traffic logs
+            supabase.from('traffic_logs').select('id').gte('timestamp', today.toISOString()),
+            // Get emergency alerts
+            supabase.from('emergency_vehicles').select('id').eq('status', 'active')
+        ]);
+
+        const citations = citationsResult.data || [];
+        const violations = violationsResult.data || [];
+        const junctions = junctionsResult.data || [];
+        const trafficLogs = trafficResult.data || [];
+        const emergencies = emergencyResult.data || [];
+
+        return {
+            totalChallans: citations.length,
+            revenueCollected: citations
+                .filter(c => c.paid)
+                .reduce((sum, c) => sum + (Number(c.fine_amount) || 0), 0),
+            pendingAmount: citations
+                .filter(c => !c.paid)
+                .reduce((sum, c) => sum + (Number(c.fine_amount) || 0), 0),
+            activeJunctions: junctions.length,
+            pendingViolations: violations.length,
+            vehiclesToday: trafficLogs.length,
+            emergencyAlerts: emergencies.length
+        };
+    } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        return {
+            totalChallans: 0,
+            revenueCollected: 0,
+            pendingAmount: 0,
+            activeJunctions: 0,
+            pendingViolations: 0,
+            vehiclesToday: 0,
+            emergencyAlerts: 0
+        };
+    }
+}
+
+/**
+ * Fetch all junctions with their current traffic status
+ */
+export async function getJunctionsWithTraffic(): Promise<JunctionWithTraffic[]> {
+    try {
+        // Get all junctions
+        const { data: junctions, error: jError } = await supabase
+            .from('junctions')
+            .select('*')
+            .order('name');
+
+        if (jError || !junctions) {
+            console.error('Error fetching junctions:', jError);
+            return [];
+        }
+
+        // Get latest traffic log for each junction
+        const junctionIds = junctions.map(j => j.id);
+
+        // Get recent traffic logs (last hour)
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data: trafficLogs } = await supabase
+            .from('traffic_logs')
+            .select('junction_id, vehicle_count, congestion_level, timestamp')
+            .in('junction_id', junctionIds)
+            .gte('timestamp', oneHourAgo)
+            .order('timestamp', { ascending: false });
+
+        // Get recent violations count per junction
+        const { data: violations } = await supabase
+            .from('violations')
+            .select('junction_id')
+            .in('junction_id', junctionIds)
+            .or('status.eq.pending,status.is.null');
+
+        // Map junctions with their traffic data
+        return junctions.map(junction => {
+            const latestLog = trafficLogs?.find(log => log.junction_id === junction.id);
+            const violationCount = violations?.filter(v => v.junction_id === junction.id).length || 0;
+
+            return {
+                id: junction.id,
+                name: junction.name,
+                latitude: junction.latitude,
+                longitude: junction.longitude,
+                status: junction.status || 'offline',
+                currentVehicleCount: latestLog?.vehicle_count || 0,
+                congestionLevel: (latestLog?.congestion_level as 'Low' | 'Medium' | 'High') || 'Low',
+                recentViolations: violationCount,
+                lastUpdate: latestLog?.timestamp || junction.last_update || new Date().toISOString()
+            };
+        });
+    } catch (error) {
+        console.error('Error fetching junctions with traffic:', error);
+        return [];
+    }
+}
+
+/**
+ * Fetch recent traffic logs for a specific junction (for the line graph)
+ */
+export async function getRecentTrafficLogs(
+    junctionId: number,
+    minutes: number = 30
+): Promise<TrafficDataPoint[]> {
+    try {
+        const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+
+        const { data, error } = await supabase
+            .from('traffic_logs')
+            .select('timestamp, vehicle_count')
+            .eq('junction_id', junctionId)
+            .gte('timestamp', since)
+            .order('timestamp', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching traffic logs:', error);
+            return [];
+        }
+
+        return (data || []).map(log => ({
+            timestamp: log.timestamp,
+            vehicleCount: log.vehicle_count
+        }));
+    } catch (error) {
+        console.error('Error fetching traffic logs:', error);
+        return [];
+    }
+}
+
+/**
+ * Subscribe to real-time traffic updates for all junctions
+ */
+export function subscribeToTrafficUpdates(
+    callback: (log: { junction_id: number; vehicle_count: number; congestion_level: string }) => void
+): () => void {
+    const channel = supabase
+        .channel('traffic-updates')
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'traffic_logs'
+            },
+            (payload) => {
+                callback(payload.new as { junction_id: number; vehicle_count: number; congestion_level: string });
+            }
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+}

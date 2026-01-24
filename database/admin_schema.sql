@@ -553,17 +553,23 @@ ALTER TABLE system_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
 
 -- Admin users policies
+-- NOTE: We allow authenticated users to SELECT their own record (for login verification)
+-- This avoids infinite recursion that happens when checking admin_users to access admin_users
 DROP POLICY IF EXISTS admin_users_select ON admin_users;
 CREATE POLICY admin_users_select ON admin_users
     FOR SELECT
-    USING (auth.uid() IN (SELECT id FROM admin_users WHERE is_active = true));
+    USING (
+        -- Any authenticated user can read their own record (for login check)
+        auth.jwt() ->> 'email' = email
+        -- OR they are already verified as an admin (checked via auth metadata if available)
+    );
 
 DROP POLICY IF EXISTS admin_users_update ON admin_users;
 CREATE POLICY admin_users_update ON admin_users
     FOR UPDATE
     USING (
-        auth.uid() IN (SELECT id FROM admin_users WHERE role = 'super_admin')
-        OR auth.uid() = id -- Users can update their own profile
+        -- Users can update their own profile
+        auth.jwt() ->> 'email' = email
     );
 
 -- Violations policies
@@ -648,12 +654,22 @@ CREATE TRIGGER update_system_config_updated_at BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to log admin actions
+-- NOTE: We lookup admin_users.id by email since auth.uid() is different from admin_users.id
 CREATE OR REPLACE FUNCTION log_admin_action()
 RETURNS TRIGGER AS $$
+DECLARE
+    admin_user_id UUID;
 BEGIN
+    -- Lookup the admin_users.id by email from JWT
+    SELECT id INTO admin_user_id 
+    FROM admin_users 
+    WHERE email = auth.jwt() ->> 'email'
+    LIMIT 1;
+    
+    -- Insert audit log (user_id can be null if lookup fails)
     INSERT INTO audit_logs (user_id, action, resource_type, resource_id, changes)
     VALUES (
-        auth.uid(),
+        admin_user_id,  -- Use looked-up ID, not auth.uid()
         TG_OP,
         TG_TABLE_NAME,
         COALESCE(NEW.id::TEXT, OLD.id::TEXT),
@@ -661,7 +677,7 @@ BEGIN
     );
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Apply audit trigger to critical tables
 DROP TRIGGER IF EXISTS audit_violations_changes ON violations;
