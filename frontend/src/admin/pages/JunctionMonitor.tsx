@@ -87,6 +87,7 @@ export default function JunctionMonitor() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [recentViolations, setRecentViolations] = useState<any[]>([]);
+    const [liveFeedUrl, setLiveFeedUrl] = useState<string | null>(null);
 
     // Chart Data State
     const [vehicleCountHistory, setVehicleCountHistory] = useState<number[]>([]);
@@ -119,10 +120,24 @@ export default function JunctionMonitor() {
                 )
                 .subscribe();
 
+            // Live Feed Subscription (New)
+            const liveFeedSub = supabase
+                .channel(`monitor-feed-${id}`)
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'junctions', filter: `id=eq.${id}` },
+                    (payload: any) => {
+                        if (payload.new.live_snapshot_url) {
+                            // Add timestamp to force recurring reload if URL is same but content changed (though URL usually changes)
+                            setLiveFeedUrl(payload.new.live_snapshot_url);
+                        }
+                    }
+                )
+                .subscribe();
+
             return () => {
                 supabase.removeChannel(trafficSub);
                 supabase.removeChannel(violationSub);
                 supabase.removeChannel(healthSub);
+                supabase.removeChannel(liveFeedSub);
             };
         }
     }, [id]);
@@ -132,6 +147,9 @@ export default function JunctionMonitor() {
         const { data } = await supabase.from('junctions').select('*').eq('id', id).single();
         if (data) {
             setJunction(data);
+            if (data.live_snapshot_url) {
+                setLiveFeedUrl(data.live_snapshot_url);
+            }
             addLog('info', 'System', `Connected to Junction: ${data.name}`);
         }
         setLoading(false);
@@ -281,15 +299,25 @@ export default function JunctionMonitor() {
                         </div>
                         <div className="monitor-card-body" style={{ padding: 0 }}>
                             <div className="video-container">
-                                {/* Placeholder since we don't have real streaming server yet */}
-                                <div className="absolute insect-0 flex items-center justify-center text-gray-500">
-                                    <p>Video Feed Loading...</p>
-                                </div>
-                                <img
-                                    src="https://images.unsplash.com/photo-1494587416117-f101a292419d?q=80&w=1000&auto=format&fit=crop"
-                                    alt="Video Feed"
-                                    className="opacity-50"
-                                />
+                                {liveFeedUrl ? (
+                                    <img
+                                        src={liveFeedUrl}
+                                        alt="Live Feed"
+                                        className="w-full h-full object-contain"
+                                        key={liveFeedUrl} // Force re-render on new URL
+                                    />
+                                ) : (
+                                    <>
+                                        <div className="absolute insect-0 flex items-center justify-center text-gray-500 z-0">
+                                            <p>Waiting for feed...</p>
+                                        </div>
+                                        <img
+                                            src="https://images.unsplash.com/photo-1494587416117-f101a292419d?q=80&w=1000&auto=format&fit=crop"
+                                            alt="Video Feed Placeholder"
+                                            className="opacity-20 w-full h-full object-cover"
+                                        />
+                                    </>
+                                )}
                                 <div className="video-overlay">
                                     <div className="video-badge">
                                         <Camera size={12} className="mr-1" /> Camera 1

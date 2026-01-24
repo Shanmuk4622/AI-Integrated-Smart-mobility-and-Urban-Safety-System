@@ -245,6 +245,8 @@ class JunctionProcessor:
         self.last_log_time = 0
         self.last_frame_time = 0
         self.latest_lp_boxes = [] # Store for visualization
+        self.last_snapshot_time = 0
+        self.frame_count = 0
 
         # Sync Config to DB
         if self.config:
@@ -540,6 +542,19 @@ class JunctionProcessor:
                     self.logger.debug(f"Synced: Density={current_lane_density}, Signal={signal_status['action']}")
                 else:
                     print(f"[Junction {self.junction_id}] Synced: Density={current_lane_density}, Signal={signal_status['action']}")
+
+            # --- LIVE SNAPSHOT UPLOAD (1 FPS) ---
+            current_time = time.time()
+            if current_time - self.last_snapshot_time >= 1.0:
+                # Upload the frame (annotated)
+                self.db.upload_frame_snapshot(frame, self.junction_id)
+                self.last_snapshot_time = current_time
+                
+                # Helper cleanup (1% chance per scan to act as 'cron')
+                if self.frame_count % 100 == 0:
+                     self.db.cleanup_old_snapshots(self.junction_id)
+
+            self.frame_count += 1
 
             # --- VISUALIZATION & OUTPUT ---
             # Only draw if we need to Show GUI or Save Video

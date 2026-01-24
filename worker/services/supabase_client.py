@@ -238,3 +238,99 @@ class SupabaseService:
             print(f"DEBUG: Junction {junction_id} status set to: {status}")
         except Exception as e:
              print(f"ERROR: Failed to update status: {e}")
+
+    def upload_frame_snapshot(self, frame, junction_id: int):
+        """
+        Uploads a frame snapshot to 'junction-frames' bucket.
+        Returns the public URL.
+        """
+        try:
+            # Resize for bandwidth optimization (e.g. 640x360)
+            h, w = frame.shape[:2]
+            scale = min(640/w, 360/h)
+            if scale < 1:
+                frame = cv2.resize(frame, (0,0), fx=scale, fy=scale)
+            
+            # Encode to JPEG
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            image_bytes = buffer.tobytes()
+            
+            # Timestamp filename
+            timestamp = int(time.time())
+            filename = f"junction_{junction_id}/{timestamp}.jpg"
+            
+            # Upload
+            res = self.supabase.storage.from_("junction-frames").upload(
+                path=filename,
+                file=image_bytes,
+                file_options={"content-type": "image/jpeg", "upsert": "true"}
+            )
+            
+            # Get Public URL
+            public_url = self.supabase.storage.from_("junction-frames").get_public_url(filename)
+            
+            # Broadcast the new frame URL via Realtime
+            self.broadcast_frame_update(junction_id, public_url)
+            
+            return public_url
+            
+        except Exception as e:
+            # print(f"ERROR: Snapshot upload failed: {e}") # Suppress to avoid spam
+            return None
+
+    def broadcast_frame_update(self, junction_id: int, image_url: str):
+        """
+        Broadcasts the new frame URL to the 'junction_live_feed' channel.
+        """
+        try:
+            payload = {
+                "junction_id": junction_id,
+                "image_url": image_url,
+                "timestamp": datetime.now().isoformat()
+            }
+            # We can't directly broadcast via python client easily without being admin or using a workaround.
+            # Workaround: Update a 'live_feeds' table or just rely on the dashboard pulling it?
+            # Better: The Dashboard can subscribe to Postgres Changes on a table.
+            # Let's use `junctions` table update "video_source" field? No that's configuration.
+            # Let's insert into a ephemeral table? No, too much DB write.
+            # ACTUALLY: Supabase Realtime Broadcast is supported via client.channel().send().
+            # But the python client support for broadcast send might be limited.
+            
+            # Alternative: Just update `last_heartbeat` in `worker_health` with metadata?
+            # Let's insert to `worker_health` often? No.
+            
+            # Best low-overhead way: Update a dedicated column `live_snapshot_url` in `junctions` table?
+            # Yes, that's persistent but acceptable for 1 update/sec.
+            self.supabase.table("junctions").update({"live_snapshot_url": image_url}).eq("id", junction_id).execute()
+            
+        except Exception as e:
+            pass
+
+    def cleanup_old_snapshots(self, junction_id: int, max_age_seconds: int = 600):
+        """
+        Deletes snapshots older than max_age_seconds.
+        """
+        try:
+            # List files
+            folder = f"junction_{junction_id}"
+            files = self.supabase.storage.from_("junction-frames").list(folder)
+            
+            now = time.time()
+            to_remove = []
+            
+            for f in files:
+                # Name is timestamp.jpg
+                try:
+                    name = f['name']
+                    ts = int(name.split('.')[0])
+                    if now - ts > max_age_seconds:
+                        to_remove.append(f"{folder}/{name}")
+                except:
+                    pass
+            
+            if to_remove:
+                self.supabase.storage.from_("junction-frames").remove(to_remove)
+                print(f"DEBUG: Cleaned up {len(to_remove)} old snapshots for Junction {junction_id}")
+                
+        except Exception as e:
+            print(f"ERROR: Cleanup failed: {e}")
