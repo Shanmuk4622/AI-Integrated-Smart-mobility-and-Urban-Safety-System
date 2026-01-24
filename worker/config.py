@@ -15,7 +15,7 @@ LONGITUDE = 78.4861838264351
 # 2. Input
 # Path to video file OR RTSP Stream URL
 # Example: "rtsp://username:password@ip:port/stream"
-VIDEO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Videos", "sample7.mp4")
+VIDEO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Videos", "sample3.mp4")
 
 # 3. Models
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

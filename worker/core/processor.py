@@ -245,6 +245,7 @@ class JunctionProcessor:
 
         # State
         self.wrong_way_violations = []
+        self.logged_speeding_ids = set()
         self.last_log_time = 0
         self.last_frame_time = 0
         self.latest_lp_boxes = [] # Store for visualization
@@ -283,7 +284,15 @@ class JunctionProcessor:
         if len(history) < 20: return False
         x_old, y_old, _, _ = history[0]
         _, y_new, _, _ = current_pos 
-        if y_new < y_old - 50: return True # Violation rule
+        
+        dy = y_new - y_old
+        # Debug only occasionally or for specific car
+        # if track_id % 10 == 0:
+        #     print(f"DEBUG: Track {track_id} len={len(history)} dy={dy}")
+            
+        if y_new < y_old - 20: 
+            print(f"DEBUG: WRONG WAY DETECTED ID={track_id} dy={dy}")
+            return True # Violation rule
         return False
 
     def read_license_plate(self, license_plate_crop):
@@ -434,7 +443,24 @@ class JunctionProcessor:
                      cv2.putText(frame, "WRONG WAY!", (sx1, sy1 - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                      if tid not in self.wrong_way_violations:
                          self.wrong_way_violations.append(tid)
-                         violation_type = "Wrong Way" # Set violation type for enhanced logging
+                         violation_type = "Wrong Way"
+
+                # Speeding Violation Check (Limit: 50 km/h for demo)
+                if speed_kmh > 50:
+                    color = (0, 0, 255)
+                    cv2.putText(frame, "SPEEDING!", (sx1, sy1 - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    # Use a separate list or flag for speeding to avoid duplicate logging if needed
+                    # For now, simplistic: if not already logged as wrong way, log as speeding
+                    # (In a real app, we'd handle multiple violation types per vehicle better)
+                    if not violation_type and tid not in self.wrong_way_violations: 
+                         # Note: Using wrong_way_violations list for debouncing is hacky but we don't have a 'speeding_violations' list yet.
+                         # Let's add one strictly for this or just rely on the fact we log once per 'violation_type' usually?
+                         # The log_violation_enhanced doesn't check for duplicates.
+                         # Let's add a debouncer set.
+                         if tid not in getattr(self, 'logged_speeding_ids', set()):
+                             if not hasattr(self, 'logged_speeding_ids'): self.logged_speeding_ids = set()
+                             self.logged_speeding_ids.add(tid)
+                             violation_type = "Over Speeding"
 
                 if self.detect_ambulance(frame, bbox):
                     color = (255, 165, 0) # Orange/Blue for ambulance
