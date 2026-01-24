@@ -101,11 +101,11 @@ export default function RoadMap({ junctions, activeJunctionId, onJunctionSelect 
                     defaultCenter={defaultCenter}
                     defaultZoom={13}
                     mapId="DEMO_MAP_ID"
-                    disableDefaultUI={false}
+                    disableDefaultUI={true}
                     zoomControl={true}
                     mapTypeControl={false}
                     streetViewControl={false}
-                    fullscreenControl={true}
+                    fullscreenControl={false}
                     tilt={0}
                     style={{ width: '100%', height: '100%' }}
                 >

@@ -5,12 +5,12 @@
 
 .sidebar {
   width: 250px;
-  background-color: #222;
-  color: white;
+  background-color: #ffffff;
+  color: #333;
   display: flex;
   flex-direction: column;
   padding: 20px;
-  border-right: 1px solid #444;
+  border-right: 1px solid #e0e0e0;
 }
 
 .logo-area {
@@ -29,19 +29,19 @@
 .nav-item {
   padding: 10px;
   text-decoration: none;
-  color: #ccc;
+  color: #555;
   border-radius: 5px;
   transition: background 0.2s;
 }
 
 .nav-item:hover {
-  background-color: #333;
-  color: white;
+  background-color: #f0f0f0;
+  color: #000;
 }
 
 .content-area {
   flex: 1;
-  background-color: #1a1a1a;
+  background-color: #f8f9fa;
   overflow: hidden;
 }
 

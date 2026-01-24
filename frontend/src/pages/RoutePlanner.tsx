@@ -452,7 +452,13 @@ export default function RoutePlanner() {
                         defaultCenter={{ lat: 16.490026, lng: 80.513759 }}
                         defaultZoom={14}
                         mapId="ROUTE_PLANNER_MAP"
-                        disableDefaultUI={false}
+                        disableDefaultUI={true}
+                        gestureHandling="greedy"
+                        clickableIcons={false}
+                        mapTypeControl={false}
+                        streetViewControl={false}
+                        fullscreenControl={false}
+                        zoomControl={true}
                     >
                         <MultiRouteDirections
                             start={startPoint}
