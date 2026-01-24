@@ -58,6 +58,8 @@ Videos/
 *.png
 !frontend/src/assets/*.png 
 !frontend/src/assets/*.jpg
+!worker/images/*.png
+!worker/images/*.jpg
 # (Keep assets if they are small icons/logos, but ignore generated outputs)
 
 # IDEs

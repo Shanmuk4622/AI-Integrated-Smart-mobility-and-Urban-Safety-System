@@ -17,7 +17,7 @@ This project leverages distributed **Edge AI (Worker Nodes)** to process video f
 
 ### 1. Admin Dashboard
 Comprehensive view of city traffic, active junctions, and real-time statistics.
-![Admin Dashboard](worker/images/adminDashboard2.png)
+![Admin Dashboard](worker/images/adminDashboard.jpeg)
 
 ### 2. Intelligent Junction Monitoring
 Deep dive into specific junctions with live video feeds, real-time vehicle counting, and congestion heatmaps.
@@ -72,6 +72,12 @@ The system follows a **Hybrid Edge-Cloud Architecture**:
 ### 📱 Mobile Application (Citizen App)
 *   **Companion App**: A dedicated mobile application for citizens to receive traffic alerts and navigate.
 *   **Source Code**: Available at [xeyynon/TUA](https://github.com/xeyynon/TUA).
+
+![Mobile App](worker/images/mobileApplication.jpeg)
+
+### 🔐 Admin Access (demo)
+*   **Email**: `vectorvector369@gmail.com`
+*   **Password**: `123456`
 
 ---
 
@@ -166,7 +172,3 @@ The worker simulates a camera feed processing unit.
 *   **Action**: The system logs the event with high priority, intended to trigger "Green Corridor" signal changes (simulated in logs).
 
 ---
-
-## 🛡️ License
-
-This project is open-source and available under the [MIT License](LICENSE).
