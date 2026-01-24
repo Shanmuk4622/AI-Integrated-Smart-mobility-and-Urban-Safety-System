@@ -635,12 +635,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply updated_at trigger to relevant tables
+DROP TRIGGER IF EXISTS update_admin_users_updated_at ON admin_users;
 CREATE TRIGGER update_admin_users_updated_at BEFORE UPDATE ON admin_users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_citations_updated_at ON citations;
 CREATE TRIGGER update_citations_updated_at BEFORE UPDATE ON citations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_system_config_updated_at ON system_config;
 CREATE TRIGGER update_system_config_updated_at BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -661,9 +664,11 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply audit trigger to critical tables
+DROP TRIGGER IF EXISTS audit_violations_changes ON violations;
 CREATE TRIGGER audit_violations_changes AFTER INSERT OR UPDATE OR DELETE ON violations
     FOR EACH ROW EXECUTE FUNCTION log_admin_action();
 
+DROP TRIGGER IF EXISTS audit_citations_changes ON citations;
 CREATE TRIGGER audit_citations_changes AFTER INSERT OR UPDATE OR DELETE ON citations
     FOR EACH ROW EXECUTE FUNCTION log_admin_action();
 
