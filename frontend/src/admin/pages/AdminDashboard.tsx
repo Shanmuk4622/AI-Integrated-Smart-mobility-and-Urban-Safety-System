@@ -1,4 +1,12 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+    APIProvider,
+    Map,
+    AdvancedMarker,
+    InfoWindow,
+    useMap,
+    useMapsLibrary
+} from '@vis.gl/react-google-maps';
 import {
     getDashboardStats,
     getJunctionsWithTraffic,
@@ -26,6 +34,26 @@ import {
     WifiOff,
     Zap
 } from 'lucide-react';
+import '../../styles/map.css';
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+// Traffic layer component
+const TrafficLayer = () => {
+    const map = useMap();
+    const maps = useMapsLibrary('maps');
+
+    useEffect(() => {
+        if (!map || !maps) return;
+        const trafficLayer = new maps.TrafficLayer();
+        trafficLayer.setMap(map);
+        return () => {
+            trafficLayer.setMap(null);
+        };
+    }, [map, maps]);
+
+    return null;
+};
 
 // Simple line chart component
 function MiniLineChart({ data, height = 80 }: { data: TrafficDataPoint[]; height?: number }) {
@@ -56,12 +84,10 @@ function MiniLineChart({ data, height = 80 }: { data: TrafficDataPoint[]; height
                         <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
                     </linearGradient>
                 </defs>
-                {/* Area fill */}
                 <polygon
                     points={`0,${height} ${points} 100,${height}`}
                     fill="url(#lineGradient)"
                 />
-                {/* Line */}
                 <polyline
                     points={points}
                     fill="none"
@@ -70,7 +96,6 @@ function MiniLineChart({ data, height = 80 }: { data: TrafficDataPoint[]; height
                     strokeLinecap="round"
                     strokeLinejoin="round"
                 />
-                {/* Latest point dot */}
                 {data.length > 0 && (
                     <circle
                         cx="100%"
@@ -93,14 +118,12 @@ function StatsCard({
     title,
     value,
     icon: Icon,
-    color,
-    trend
+    color
 }: {
     title: string;
     value: string | number;
     icon: React.ElementType;
     color: string;
-    trend?: { value: number; label: string };
 }) {
     const colorClasses: Record<string, string> = {
         blue: 'bg-blue-50 text-blue-600 border-blue-100',
@@ -117,15 +140,6 @@ function StatsCard({
                 <div>
                     <p className="text-sm font-medium text-gray-500">{title}</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-                    {trend && (
-                        <div className="flex items-center gap-1 mt-2">
-                            <TrendingUp size={14} className={trend.value >= 0 ? 'text-green-500' : 'text-red-500'} />
-                            <span className={`text-xs font-medium ${trend.value >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {trend.value >= 0 ? '+' : ''}{trend.value}%
-                            </span>
-                            <span className="text-xs text-gray-400">{trend.label}</span>
-                        </div>
-                    )}
                 </div>
                 <div className={`p-3 rounded-xl border ${colorClasses[color]}`}>
                     <Icon size={22} />
@@ -179,7 +193,7 @@ function JunctionDetailsPanel({
                         {junction.congestionLevel.toUpperCase()} TRAFFIC
                     </span>
                 </div>
-                <button onClick={onClose} className="text-gray-400 hover:text-white">×</button>
+                <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">×</button>
             </div>
 
             <div className="space-y-4 flex-1">
@@ -213,7 +227,6 @@ function JunctionDetailsPanel({
                     )}
                 </div>
 
-                {/* Traffic chart */}
                 <div className="mt-4">
                     <p className="text-gray-400 text-xs mb-2">Traffic (Last 30 min)</p>
                     <div className="bg-gray-700/30 rounded-lg p-3">
@@ -230,8 +243,8 @@ function JunctionDetailsPanel({
     );
 }
 
-// Junction marker on map (simplified visual representation)
-function JunctionMarker({
+// Custom marker for junctions with heatmap coloring
+function HeatmapMarker({
     junction,
     isSelected,
     onClick
@@ -242,41 +255,144 @@ function JunctionMarker({
 }) {
     const getColor = (level: string) => {
         switch (level) {
-            case 'High': return 'bg-red-500 border-red-300';
-            case 'Medium': return 'bg-yellow-500 border-yellow-300';
-            default: return 'bg-green-500 border-green-300';
+            case 'High': return { bg: '#EF4444', border: '#FCA5A5', pulse: '#EF4444' };
+            case 'Medium': return { bg: '#F59E0B', border: '#FCD34D', pulse: '#F59E0B' };
+            default: return { bg: '#22C55E', border: '#86EFAC', pulse: '#22C55E' };
         }
     };
 
+    const colors = getColor(junction.congestionLevel);
+
     return (
-        <button
+        <div
             onClick={onClick}
-            className={`
-                absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200
-                ${isSelected ? 'scale-150 z-20' : 'hover:scale-125 z-10'}
-            `}
-            style={{
-                left: `${((junction.longitude - 78.4) / 0.2) * 100}%`,
-                top: `${100 - ((junction.latitude - 17.3) / 0.3) * 100}%`,
-            }}
+            className={`cursor-pointer transition-transform duration-200 ${isSelected ? 'scale-150' : 'hover:scale-125'}`}
+            style={{ position: 'relative' }}
         >
-            <div className={`
-                w-4 h-4 rounded-full border-2 shadow-lg
-                ${getColor(junction.congestionLevel)}
-                ${isSelected ? 'ring-4 ring-white/50' : ''}
-            `}>
-                {junction.status === 'active' && (
-                    <span className="absolute inset-0 rounded-full animate-ping opacity-50"
-                        style={{ backgroundColor: junction.congestionLevel === 'High' ? '#EF4444' : junction.congestionLevel === 'Medium' ? '#F59E0B' : '#22C55E' }}
-                    />
-                )}
-            </div>
+            {/* Pulse animation for active junctions */}
+            {junction.status === 'active' && (
+                <div
+                    className="absolute inset-0 rounded-full animate-ping opacity-40"
+                    style={{
+                        backgroundColor: colors.pulse,
+                        width: '24px',
+                        height: '24px',
+                        left: '-4px',
+                        top: '-4px'
+                    }}
+                />
+            )}
+            {/* Main marker */}
+            <div
+                className={`w-4 h-4 rounded-full border-2 shadow-lg ${isSelected ? 'ring-4 ring-white/50' : ''}`}
+                style={{
+                    backgroundColor: colors.bg,
+                    borderColor: colors.border
+                }}
+            />
+            {/* Label on selection */}
             {isSelected && (
-                <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-50 shadow-lg">
                     {junction.name}
                 </div>
             )}
-        </button>
+        </div>
+    );
+}
+
+// Dashboard Map Component with Google Maps
+function DashboardMap({
+    junctions,
+    selectedJunction,
+    onJunctionSelect
+}: {
+    junctions: JunctionWithTraffic[];
+    selectedJunction: JunctionWithTraffic | null;
+    onJunctionSelect: (junction: JunctionWithTraffic | null) => void;
+}) {
+    const [infoWindowJunction, setInfoWindowJunction] = useState<JunctionWithTraffic | null>(null);
+
+    const defaultCenter = useMemo(() => {
+        if (junctions.length > 0) {
+            // Calculate center of all junctions
+            const avgLat = junctions.reduce((sum, j) => sum + j.latitude, 0) / junctions.length;
+            const avgLng = junctions.reduce((sum, j) => sum + j.longitude, 0) / junctions.length;
+            return { lat: avgLat, lng: avgLng };
+        }
+        return { lat: 17.4251, lng: 78.4861 }; // Hyderabad default
+    }, [junctions]);
+
+    const handleMarkerClick = useCallback((junction: JunctionWithTraffic) => {
+        setInfoWindowJunction(junction);
+        onJunctionSelect(junction);
+    }, [onJunctionSelect]);
+
+    if (!GOOGLE_MAPS_API_KEY) {
+        return (
+            <div className="h-full w-full flex items-center justify-center bg-gray-800 text-gray-400">
+                <div className="text-center">
+                    <MapPin size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>Google Maps API Key Missing</p>
+                    <p className="text-sm mt-2">Add VITE_GOOGLE_MAPS_API_KEY to .env</p>
+                </div>
+            </div>
+        );
+    }
+
+    console.log('🗺️ Dashboard Map rendering with junctions:', junctions);
+
+    return (
+        <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['places', 'marker']}>
+            <Map
+                defaultCenter={defaultCenter}
+                defaultZoom={12}
+                mapId="dashboard-map"
+                disableDefaultUI={true}
+                zoomControl={true}
+                mapTypeControl={false}
+                streetViewControl={false}
+                fullscreenControl={false}
+                style={{ width: '100%', height: '100%' }}
+            >
+                <TrafficLayer />
+
+                {junctions.map((junction) => (
+                    <AdvancedMarker
+                        key={junction.id}
+                        position={{ lat: junction.latitude, lng: junction.longitude }}
+                        onClick={() => handleMarkerClick(junction)}
+                        title={junction.name}
+                    >
+                        <HeatmapMarker
+                            junction={junction}
+                            isSelected={selectedJunction?.id === junction.id}
+                            onClick={() => handleMarkerClick(junction)}
+                        />
+                    </AdvancedMarker>
+                ))}
+
+                {infoWindowJunction && (
+                    <InfoWindow
+                        position={{ lat: infoWindowJunction.latitude, lng: infoWindowJunction.longitude }}
+                        onCloseClick={() => setInfoWindowJunction(null)}
+                    >
+                        <div className="p-2 min-w-[150px]">
+                            <h4 className="font-bold text-gray-900">{infoWindowJunction.name}</h4>
+                            <div className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-bold ${infoWindowJunction.congestionLevel === 'High' ? 'bg-red-100 text-red-700' :
+                                    infoWindowJunction.congestionLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-green-100 text-green-700'
+                                }`}>
+                                {infoWindowJunction.congestionLevel}
+                            </div>
+                            <div className="mt-2 text-sm text-gray-600">
+                                <p>Vehicles: <strong>{infoWindowJunction.currentVehicleCount}</strong></p>
+                                <p>Status: <strong>{infoWindowJunction.status}</strong></p>
+                            </div>
+                        </div>
+                    </InfoWindow>
+                )}
+            </Map>
+        </APIProvider>
     );
 }
 
@@ -298,6 +414,7 @@ export default function AdminDashboard() {
         setStats(statsData);
         setJunctions(junctionsData);
         setRecentViolations(violationsData);
+        console.log('📊 Loaded junctions:', junctionsData);
     }, []);
 
     const handleRefresh = async () => {
@@ -311,7 +428,6 @@ export default function AdminDashboard() {
         fetchData().finally(() => setLoading(false));
     }, [fetchData]);
 
-    // Fetch traffic data when junction is selected
     useEffect(() => {
         if (selectedJunction) {
             getRecentTrafficLogs(selectedJunction.id, 30).then(setTrafficData);
@@ -320,16 +436,13 @@ export default function AdminDashboard() {
         }
     }, [selectedJunction]);
 
-    // Subscribe to real-time traffic updates
     useEffect(() => {
         const unsubscribe = subscribeToTrafficUpdates((log) => {
-            // Update junction traffic data
             setJunctions(prev => prev.map(j =>
                 j.id === log.junction_id
                     ? { ...j, currentVehicleCount: log.vehicle_count, congestionLevel: log.congestion_level as 'Low' | 'Medium' | 'High', lastUpdate: new Date().toISOString() }
                     : j
             ));
-            // If this is the selected junction, add to traffic data
             if (selectedJunction?.id === log.junction_id) {
                 setTrafficData(prev => [...prev.slice(-29), { timestamp: new Date().toISOString(), vehicleCount: log.vehicle_count }]);
             }
@@ -375,52 +488,23 @@ export default function AdminDashboard() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <StatsCard
-                    title="Total Challans"
-                    value={stats?.totalChallans || 0}
-                    icon={Receipt}
-                    color="blue"
-                />
-                <StatsCard
-                    title="Revenue Collected"
-                    value={formatCurrency(stats?.revenueCollected || 0)}
-                    icon={IndianRupee}
-                    color="green"
-                />
-                <StatsCard
-                    title="Active Junctions"
-                    value={stats?.activeJunctions || 0}
-                    icon={MapPin}
-                    color="purple"
-                />
-                <StatsCard
-                    title="Pending Violations"
-                    value={stats?.pendingViolations || 0}
-                    icon={AlertTriangle}
-                    color="yellow"
-                />
-                <StatsCard
-                    title="Vehicles Today"
-                    value={stats?.vehiclesToday.toLocaleString() || 0}
-                    icon={Car}
-                    color="blue"
-                />
-                <StatsCard
-                    title="Emergency Alerts"
-                    value={stats?.emergencyAlerts || 0}
-                    icon={Ambulance}
-                    color="red"
-                />
+                <StatsCard title="Total Challans" value={stats?.totalChallans || 0} icon={Receipt} color="blue" />
+                <StatsCard title="Revenue Collected" value={formatCurrency(stats?.revenueCollected || 0)} icon={IndianRupee} color="green" />
+                <StatsCard title="Active Junctions" value={stats?.activeJunctions || 0} icon={MapPin} color="purple" />
+                <StatsCard title="Pending Violations" value={stats?.pendingViolations || 0} icon={AlertTriangle} color="yellow" />
+                <StatsCard title="Vehicles Today" value={stats?.vehiclesToday.toLocaleString() || 0} icon={Car} color="blue" />
+                <StatsCard title="Emergency Alerts" value={stats?.emergencyAlerts || 0} icon={Ambulance} color="red" />
             </div>
 
             {/* Main Content: Map + Details Panel */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Map Section (2/3 width) */}
-                <div className="lg:col-span-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden shadow-lg">
+                {/* Map Section */}
+                <div className="lg:col-span-2 bg-gray-900 rounded-xl overflow-hidden shadow-lg">
                     <div className="p-4 border-b border-gray-700 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <MapPin className="text-blue-400" />
                             <h2 className="text-white font-semibold">Junction Overview</h2>
+                            <span className="text-gray-400 text-sm">({junctions.length} junctions)</span>
                         </div>
                         <div className="flex items-center gap-2 px-2 py-1 bg-red-500/20 border border-red-500/50 rounded-full">
                             <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
@@ -428,59 +512,33 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    {/* Simplified Map View */}
-                    <div className="relative h-80 bg-gradient-to-br from-green-900/30 to-blue-900/30 overflow-hidden">
-                        {/* Map background */}
-                        <div className="absolute inset-0 opacity-20">
-                            <svg className="w-full h-full" viewBox="0 0 100 100">
-                                {/* Grid lines */}
-                                {[...Array(10)].map((_, i) => (
-                                    <g key={i}>
-                                        <line x1={i * 10} y1="0" x2={i * 10} y2="100" stroke="white" strokeWidth="0.1" />
-                                        <line x1="0" y1={i * 10} x2="100" y2={i * 10} stroke="white" strokeWidth="0.1" />
-                                    </g>
-                                ))}
-                            </svg>
+                    {/* Google Maps */}
+                    <div className="h-80">
+                        <DashboardMap
+                            junctions={junctions}
+                            selectedJunction={selectedJunction}
+                            onJunctionSelect={setSelectedJunction}
+                        />
+                    </div>
+
+                    {/* Legend */}
+                    <div className="p-3 bg-gray-800 border-t border-gray-700 flex items-center gap-6 text-xs text-gray-300">
+                        <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-green-500" />
+                            <span>Low Traffic</span>
                         </div>
-
-                        {/* Legend */}
-                        <div className="absolute top-4 left-4 bg-gray-900/80 backdrop-blur rounded-lg p-3 text-xs text-white">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="w-3 h-3 rounded-full bg-green-500" />
-                                <span>Low Traffic</span>
-                            </div>
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="w-3 h-3 rounded-full bg-yellow-500" />
-                                <span>Medium Traffic</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full bg-red-500" />
-                                <span>High Traffic</span>
-                            </div>
+                        <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-yellow-500" />
+                            <span>Medium Traffic</span>
                         </div>
-
-                        {/* Junction Markers */}
-                        {junctions.map(junction => (
-                            <JunctionMarker
-                                key={junction.id}
-                                junction={junction}
-                                isSelected={selectedJunction?.id === junction.id}
-                                onClick={() => setSelectedJunction(
-                                    selectedJunction?.id === junction.id ? null : junction
-                                )}
-                            />
-                        ))}
-
-                        {/* No junctions message */}
-                        {junctions.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                                No junctions configured
-                            </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-red-500" />
+                            <span>High Traffic</span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Details Panel (1/3 width) */}
+                {/* Details Panel */}
                 <div className="lg:col-span-1">
                     <JunctionDetailsPanel
                         junction={selectedJunction}
