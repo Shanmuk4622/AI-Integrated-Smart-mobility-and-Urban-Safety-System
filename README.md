@@ -9,7 +9,11 @@
 
 > **A scalable, AI-powered system for real-time traffic monitoring, intelligent signal control, and automated violation detection.**
 
+![Junction Monitor](worker/images/allApplication.jpeg)
+
 This project leverages distributed **Edge AI (Worker Nodes)** to process video feeds at traffic junctions and synchronizes data with a centralized **Cloud Dashboard** for city-wide traffic management.
+
+🚀 **[View Live Demo](https://smart-mobility-and-urban-safety-sys.vercel.app/)**
 
 ---
 
@@ -36,6 +40,43 @@ The public-facing route planner that adapts to real-time congestion levels.
 
 The system follows a **Hybrid Edge-Cloud Architecture**:
 
+![Junction Monitor](worker/images/architecture.png)
+
+```mermaid
+graph TD
+    subgraph Edge Layer [📍 Edge Layer - Traffic Junctions]
+        Cam[🎥 CCTV Camera] -->|RTSP Stream| Worker[🐍 Python AI Worker]
+        Worker -->|Frame| YOLO[🧠 YOLOv8 Detection]
+        YOLO -->|BBox & Class| Tracker[🎯 SORT Tracker]
+        Tracker -->|Track IDs| Logic[⚡ Logic Unit]
+        
+        subgraph Logic Internals
+            Logic -->|Speed = dist/time| SpeedCalc[Speed Estimation]
+            Logic -->|Vector Analysis| WrongWay[Wrong-Way Detection]
+            Logic -->|Class Check| Ambulance[🚑 Ambulance Priority]
+        end
+    end
+
+    subgraph Cloud Layer [☁️ Cloud Layer - Supabase]
+        Logic -->|JSON Logs| DB[(🗄️ Database)]
+        Logic -->|Upload Image| Storage[📂 Object Storage]
+        DB -->|Realtime Event| PubSub{📡 Realtime Pub/Sub}
+    end
+
+    subgraph Application Layer [💻 Application Layer]
+        PubSub -->|Subscribe| Admin[🖥️ Admin Dashboard]
+        PubSub -->|Subscribe| Route[🗺️ Route Planner]
+        PubSub -->|Subscribe| Mobile[📱 Mobile App]
+        
+        Admin -->|Fetch| Storage
+        Route -->|Congestion Data| GoogleMaps[🌍 Google Maps API]
+    end
+
+    style Edge Layer fill:#f9f9f9,stroke:#333,stroke-width:2px
+    style Cloud Layer fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    style Application Layer fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+```
+
 1.  **Edge Layer (Worker Nodes)**:
     *   **Technology**: Python, YOLOv8, OpenCV, SORT Tracker.
     *   **Role**: Deployed at physical junctions. They process raw video locally to extract structured data (vehicle counts, speeds, violations) and upload compressed snapshots.
@@ -48,6 +89,7 @@ The system follows a **Hybrid Edge-Cloud Architecture**:
 3.  **Application Layer (Frontend)**:
     *   **Technology**: React, Vite, Google Maps API, Recharts.
     *   **Role**: Provides interfaces for both Administrators (Traffic Control Center) and Citizens (Smart Route Planner).
+    *   **Deployment**: Hosted on [Vercel](https://smart-mobility-and-urban-safety-sys.vercel.app/).
 
 ---
 
@@ -153,7 +195,7 @@ The worker simulates a camera feed processing unit.
     npm run dev
     ```
 4.  Open `http://localhost:5173` to see the Route Planner.
-5.  Access Admin Panel via the **Menu (Top-Left)** or at `http://localhost:5173/admin/login`.
+5.  Access Admin Panel via the **Menu (Top-Left)** or at `http://localhost:5173/admin/login` (or visit the [Live Demo](https://smart-mobility-and-urban-safety-sys.vercel.app/)).
 
 ---
 
