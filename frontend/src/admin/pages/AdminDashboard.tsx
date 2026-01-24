@@ -27,7 +27,6 @@ import {
     Car,
     Ambulance,
     RefreshCw,
-    TrendingUp,
     Clock,
     Activity,
     ChevronRight,
@@ -378,8 +377,8 @@ function DashboardMap({
                         <div className="p-2 min-w-[150px]">
                             <h4 className="font-bold text-gray-900">{infoWindowJunction.name}</h4>
                             <div className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-bold ${infoWindowJunction.congestionLevel === 'High' ? 'bg-red-100 text-red-700' :
-                                    infoWindowJunction.congestionLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                        'bg-green-100 text-green-700'
+                                infoWindowJunction.congestionLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-green-100 text-green-700'
                                 }`}>
                                 {infoWindowJunction.congestionLevel}
                             </div>
@@ -597,8 +596,8 @@ export default function AdminDashboard() {
                                 <div key={violation.id} className="px-5 py-3 hover:bg-gray-50 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <span className={`w-2 h-2 rounded-full ${violation.violation_type === 'Wrong Way' ? 'bg-red-500' :
-                                                violation.violation_type === 'Red Light' ? 'bg-orange-500' :
-                                                    'bg-yellow-500'
+                                            violation.violation_type === 'Red Light' ? 'bg-orange-500' :
+                                                'bg-yellow-500'
                                             }`} />
                                         <div>
                                             <p className="font-medium text-gray-900 text-sm">{violation.violation_type}</p>
@@ -607,8 +606,8 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className="text-right">
                                         <span className={`text-xs px-2 py-1 rounded-full ${violation.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                violation.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                                    'bg-red-100 text-red-700'
+                                            violation.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                                'bg-red-100 text-red-700'
                                             }`}>
                                             {violation.status}
                                         </span>
@@ -657,8 +656,8 @@ export default function AdminDashboard() {
                                         </td>
                                         <td className="px-5 py-3 text-center">
                                             <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${junction.congestionLevel === 'High' ? 'bg-red-100 text-red-700' :
-                                                    junction.congestionLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                        'bg-green-100 text-green-700'
+                                                junction.congestionLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                    'bg-green-100 text-green-700'
                                                 }`}>
                                                 {junction.congestionLevel}
                                             </span>

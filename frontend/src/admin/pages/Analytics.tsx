@@ -8,8 +8,7 @@ import {
     AlertTriangle,
     IndianRupee,
     Clock,
-    MapPin,
-    Calendar
+    MapPin
 } from 'lucide-react';
 
 interface TrafficStat {
@@ -258,8 +257,8 @@ export default function Analytics() {
                                 key={range}
                                 onClick={() => setTimeRange(range)}
                                 className={`px-3 py-2 text-sm font-medium transition-colors ${timeRange === range
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-white text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
                                 {range === 'today' ? 'Today' : range === 'week' ? '7D' : range === 'month' ? '30D' : 'All'}
@@ -428,20 +427,20 @@ export default function Analytics() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${js.total_violations > 10
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : js.total_violations > 0
-                                                        ? 'bg-yellow-100 text-yellow-700'
-                                                        : 'bg-green-100 text-green-700'
+                                                ? 'bg-red-100 text-red-700'
+                                                : js.total_violations > 0
+                                                    ? 'bg-yellow-100 text-yellow-700'
+                                                    : 'bg-green-100 text-green-700'
                                                 }`}>
                                                 {js.total_violations}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${js.congestion_minutes > 30
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : js.congestion_minutes > 10
-                                                        ? 'bg-yellow-100 text-yellow-700'
-                                                        : 'bg-green-100 text-green-700'
+                                                ? 'bg-red-100 text-red-700'
+                                                : js.congestion_minutes > 10
+                                                    ? 'bg-yellow-100 text-yellow-700'
+                                                    : 'bg-green-100 text-green-700'
                                                 }`}>
                                                 {js.congestion_minutes} logs
                                             </span>
