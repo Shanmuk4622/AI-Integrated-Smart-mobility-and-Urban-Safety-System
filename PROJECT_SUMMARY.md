@@ -38,8 +38,12 @@ The control center for administrators.
         - Route distance and time information display
         - Visual feedback with rerouting notifications
 
-### 3. Backend Service (`/backend`)
-*Legacy Component*. Originally an all-in-one server using FastAPI. The logic has been migrated to independent workers and Supabase for scalability, but this folder contains the original API implementation and assets.
+### 3. Database & Scripts (`/database`)
+Central repository for all SQL schemas and setup scripts.
+- **Key Files**: `admin_schema.sql`, `fix_admin_rls.sql`.
+
+### 4. Legacy Backend (`/legacy`)
+Previous version of the server (FastAPI). Now replaced by the Supabase + Worker architecture. Keeping for reference.
 
 ---
 
