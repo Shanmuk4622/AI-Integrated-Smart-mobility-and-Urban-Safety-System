@@ -6,6 +6,11 @@ import ViolationsSimple from './pages/ViolationsSimple';
 import AdminLayout from './admin/layouts/AdminLayout';
 import AdminLogin from './admin/pages/AdminLogin';
 import NewAdminDashboard from './admin/pages/AdminDashboard';
+import Junctions from './admin/pages/Junctions';
+import Violations from './admin/pages/Violations';
+import Challans from './admin/pages/Challans';
+import Analytics from './admin/pages/Analytics';
+import Settings from './admin/pages/Settings';
 import './App.css';
 
 // Layout for the main/public view
@@ -46,7 +51,11 @@ function App() {
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<NewAdminDashboard />} />
           <Route path="dashboard" element={<NewAdminDashboard />} />
-          {/* Add more admin routes here later */}
+          <Route path="junctions" element={<Junctions />} />
+          <Route path="violations" element={<Violations />} />
+          <Route path="challans" element={<Challans />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </Router>
@@ -54,3 +63,4 @@ function App() {
 }
 
 export default App;
+

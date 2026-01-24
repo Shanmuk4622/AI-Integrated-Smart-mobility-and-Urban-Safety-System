@@ -5,13 +5,13 @@ import {
     Map as MapIcon,
     AlertTriangle,
     FileText,
-    Users,
     Settings,
     LogOut,
     Menu,
     X,
     Bell,
-    Loader2
+    Loader2,
+    BarChart3
 } from 'lucide-react';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 
@@ -40,7 +40,7 @@ export default function AdminLayout() {
         { name: 'Junctions', path: '/admin/junctions', icon: MapIcon },
         { name: 'Violations', path: '/admin/violations', icon: AlertTriangle },
         { name: 'Challans', path: '/admin/challans', icon: FileText },
-        { name: 'Users', path: '/admin/users', icon: Users },
+        { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
         { name: 'Settings', path: '/admin/settings', icon: Settings },
     ];
 

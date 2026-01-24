@@ -1,4 +1,4 @@
--- =====================================================
+﻿-- =====================================================
 -- ADMIN PANEL DATABASE SCHEMA
 -- Smart Mobility & Urban Safety System
 -- =====================================================
@@ -14,14 +14,19 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- 1. ADMIN USERS & AUTHENTICATION
 -- =====================================================
 
--- Admin roles enum
-CREATE TYPE admin_role AS ENUM (
-    'super_admin',
-    'traffic_manager',
-    'analyst',
-    'operator',
-    'auditor'
-);
+-- Admin roles enum (create only if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'admin_role') THEN
+        CREATE TYPE admin_role AS ENUM (
+            'super_admin',
+            'traffic_manager',
+            'analyst',
+            'operator',
+            'auditor'
+        );
+    END IF;
+END $$;
 
 -- Admin users table
 CREATE TABLE IF NOT EXISTS admin_users (
@@ -96,30 +101,35 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 -- Indexes for admin tables
-CREATE INDEX idx_admin_users_email ON admin_users(email);
-CREATE INDEX idx_admin_users_role ON admin_users(role);
-CREATE INDEX idx_admin_users_active ON admin_users(is_active);
-CREATE INDEX idx_admin_sessions_user ON admin_sessions(user_id);
-CREATE INDEX idx_admin_sessions_expires ON admin_sessions(expires_at);
-CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
-CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);
+CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users(role);
+CREATE INDEX IF NOT EXISTS idx_admin_users_active ON admin_users(is_active);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON admin_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
 
 -- =====================================================
 -- 2. VIOLATION MANAGEMENT ENHANCEMENTS
 -- =====================================================
 
--- Violation status enum
-CREATE TYPE violation_status AS ENUM (
-    'pending',
-    'under_review',
-    'approved',
-    'rejected',
-    'appealed',
-    'appeal_approved',
-    'appeal_rejected',
-    'closed'
-);
+-- Violation status enum (create only if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'violation_status') THEN
+        CREATE TYPE violation_status AS ENUM (
+            'pending',
+            'under_review',
+            'approved',
+            'rejected',
+            'appealed',
+            'appeal_approved',
+            'appeal_rejected',
+            'closed'
+        );
+    END IF;
+END $$;
 
 -- Update existing violations table (if it exists)
 DO $$ 
@@ -211,10 +221,10 @@ CREATE TABLE IF NOT EXISTS citations (
 CREATE INDEX IF NOT EXISTS idx_violations_status ON violations(status);
 CREATE INDEX IF NOT EXISTS idx_violations_reviewed_at ON violations(reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_violations_confidence ON violations(confidence_score DESC);
-CREATE INDEX idx_citations_violation ON citations(violation_id);
-CREATE INDEX idx_citations_due_date ON citations(due_date);
-CREATE INDEX idx_citations_paid ON citations(paid);
-CREATE INDEX idx_citations_citation_number ON citations(citation_number);
+CREATE INDEX IF NOT EXISTS idx_citations_violation ON citations(violation_id);
+CREATE INDEX IF NOT EXISTS idx_citations_due_date ON citations(due_date);
+CREATE INDEX IF NOT EXISTS idx_citations_paid ON citations(paid);
+CREATE INDEX IF NOT EXISTS idx_citations_citation_number ON citations(citation_number);
 
 -- =====================================================
 -- 3. ANALYTICS & REPORTING
@@ -295,9 +305,9 @@ CREATE TABLE IF NOT EXISTS violation_stats_daily (
 );
 
 -- Indexes for analytics
-CREATE INDEX idx_hourly_junction_time ON traffic_stats_hourly(junction_id, hour_timestamp DESC);
-CREATE INDEX idx_daily_junction_date ON traffic_stats_daily(junction_id, date DESC);
-CREATE INDEX idx_violation_stats_date ON violation_stats_daily(date DESC);
+CREATE INDEX IF NOT EXISTS idx_hourly_junction_time ON traffic_stats_hourly(junction_id, hour_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_junction_date ON traffic_stats_daily(junction_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_violation_stats_date ON violation_stats_daily(date DESC);
 
 -- =====================================================
 -- 4. SYSTEM HEALTH & MONITORING
@@ -389,11 +399,11 @@ CREATE TABLE IF NOT EXISTS incidents (
 );
 
 -- Indexes for monitoring
-CREATE INDEX idx_worker_health_junction ON worker_health(junction_id);
-CREATE INDEX idx_worker_health_timestamp ON worker_health(created_at DESC);
-CREATE INDEX idx_alerts_status ON system_alerts(status, triggered_at DESC);
-CREATE INDEX idx_alerts_severity ON system_alerts(severity);
-CREATE INDEX idx_incidents_status ON incidents(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_worker_health_junction ON worker_health(junction_id);
+CREATE INDEX IF NOT EXISTS idx_worker_health_timestamp ON worker_health(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON system_alerts(status, triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_severity ON system_alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status, created_at DESC);
 
 -- =====================================================
 -- 5. EMERGENCY VEHICLE PRIORITY
@@ -443,9 +453,9 @@ CREATE TABLE IF NOT EXISTS priority_routes (
 );
 
 -- Indexes for emergency
-CREATE INDEX idx_emergency_status ON emergency_vehicles(status, detected_at DESC);
-CREATE INDEX idx_emergency_junction ON emergency_vehicles(junction_id);
-CREATE INDEX idx_priority_routes_active ON priority_routes(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_emergency_status ON emergency_vehicles(status, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_emergency_junction ON emergency_vehicles(junction_id);
+CREATE INDEX IF NOT EXISTS idx_priority_routes_active ON priority_routes(status, expires_at);
 
 -- =====================================================
 -- 6. CONFIGURATION & SETTINGS
@@ -526,8 +536,8 @@ CREATE TABLE IF NOT EXISTS report_history (
 );
 
 -- Indexes for reports
-CREATE INDEX idx_scheduled_reports_active ON scheduled_reports(is_active, next_run_at);
-CREATE INDEX idx_report_history_report ON report_history(scheduled_report_id, generated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scheduled_reports_active ON scheduled_reports(is_active, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_report_history_report ON report_history(scheduled_report_id, generated_at DESC);
 
 -- =====================================================
 -- 8. ROW LEVEL SECURITY (RLS) POLICIES
@@ -543,10 +553,12 @@ ALTER TABLE system_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
 
 -- Admin users policies
+DROP POLICY IF EXISTS admin_users_select ON admin_users;
 CREATE POLICY admin_users_select ON admin_users
     FOR SELECT
     USING (auth.uid() IN (SELECT id FROM admin_users WHERE is_active = true));
 
+DROP POLICY IF EXISTS admin_users_update ON admin_users;
 CREATE POLICY admin_users_update ON admin_users
     FOR UPDATE
     USING (
@@ -555,6 +567,7 @@ CREATE POLICY admin_users_update ON admin_users
     );
 
 -- Violations policies
+DROP POLICY IF EXISTS violations_select ON violations;
 CREATE POLICY violations_select ON violations
     FOR SELECT
     USING (
@@ -564,6 +577,7 @@ CREATE POLICY violations_select ON violations
         )
     );
 
+DROP POLICY IF EXISTS violations_update ON violations;
 CREATE POLICY violations_update ON violations
     FOR UPDATE
     USING (
@@ -574,6 +588,7 @@ CREATE POLICY violations_update ON violations
     );
 
 -- Audit logs policies (read-only for most, super_admin can delete)
+DROP POLICY IF EXISTS audit_logs_select ON audit_logs;
 CREATE POLICY audit_logs_select ON audit_logs
     FOR SELECT
     USING (
@@ -583,17 +598,20 @@ CREATE POLICY audit_logs_select ON audit_logs
         )
     );
 
+DROP POLICY IF EXISTS audit_logs_insert ON audit_logs;
 CREATE POLICY audit_logs_insert ON audit_logs
     FOR INSERT
     WITH CHECK (auth.role() = 'authenticated');
 
 -- System alerts policies
+DROP POLICY IF EXISTS alerts_select ON system_alerts;
 CREATE POLICY alerts_select ON system_alerts
     FOR SELECT
     USING (
         auth.uid() IN (SELECT id FROM admin_users WHERE is_active = true)
     );
 
+DROP POLICY IF EXISTS alerts_update ON system_alerts;
 CREATE POLICY alerts_update ON system_alerts
     FOR UPDATE
     USING (
@@ -797,3 +815,34 @@ BEGIN
     RAISE NOTICE '';
     RAISE NOTICE '⚠️  IMPORTANT: Change the default admin password immediately!';
 END $$;
+
+-- =====================================================
+-- ADDITIONAL COLUMNS (Added for worker integration)
+-- =====================================================
+
+-- Add license_plate column to violations if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'violations' AND column_name = 'license_plate') THEN
+        ALTER TABLE violations ADD COLUMN license_plate TEXT;
+    END IF;
+END $$;
+
+-- Add Worker Configuration Columns to Junctions Table
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'junctions' AND column_name = 'ppm') THEN
+        ALTER TABLE junctions ADD COLUMN ppm INT DEFAULT 50; -- Pixels Per Meter
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'junctions' AND column_name = 'fps') THEN
+        ALTER TABLE junctions ADD COLUMN fps INT DEFAULT 30; -- Speed Calculation FPS
+    END IF;
+END $$;
+
+-- Optional: Add comments
+COMMENT ON COLUMN junctions.ppm IS 'Calibration: Pixels per meter for speed estimation';
+COMMENT ON COLUMN junctions.fps IS 'Calibration: Assumed FPS of input video';

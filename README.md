@@ -36,6 +36,27 @@ graph TD
 
 ---
 
+## 🔄 How It Works (Workflow)
+
+### 1. The Edge Worker (The "Eyes")
+*   **Input**: The Python script (`worker/`) connects to a CCTV camera or video file.
+*   **Processing**:
+    *   **YOLOv8** detects vehicles (Car, Truck, Bus, Motorcycle).
+    *   **SORT Tracker** assigns a unique ID to each vehicle to track its path.
+    *   **Logic Engine** calculates speed (pixels/frame), checks for red-light violations, and detects ambulances.
+*   **Sync**: Every few seconds, it sends a summary (Traffic Density, Speed) to **Supabase**. If a violation occurs, it uploads the image immediately.
+
+### 2. The Cloud (The "Brain")
+*   **Supabase** acts as the central hub.
+*   **Database**: Stores `traffic_logs`, `violations`, and `junctions` metadata.
+*   **Realtime**: Instantly broadcasts updates (via WebSockets) to anyone viewing the map.
+
+### 3. The Frontend (The "Face")
+*   **Public Map**: Users see live traffic congestion (Red/Green lines) based on real-time data.
+*   **Admin Dashboard**: City officials monitor the health of every junction (FPS, CPU) and review violations.
+
+---
+
 ## ✨ Key Features
 
 ### 🧠 Edge AI (Python Workers)
@@ -98,6 +119,30 @@ npm run dev
 ```
 > Access: `http://localhost:5173`
 > Admin Login: `http://localhost:5173/admin/login`
+
+---
+
+## 🛠️ How to Add a New Junction
+
+You can simulate multiple traffic nodes by running multiple workers or simply changing the configuration.
+
+1.  Open **`worker/config.py`**.
+2.  Change the **Identity**:
+    ```python
+    JUNCTION_ID = 5           # Give it a unique number
+    LOCATION_NAME = "My New Road"
+    LATITUDE = 17.456        # Set coordinates
+    LONGITUDE = 78.456
+    ```
+3.  (Optional) Tune Calibration:
+    ```python
+    SPEED_CALCULATION_FPS = 30 # Match your video FPS
+    ```
+4.  **Run the Worker**:
+    ```powershell
+    .\run_worker.bat
+    ```
+5.  **Result**: The new junction automatically appears on the **Admin Dashboard** and **Public Map**! 🚀
 
 ---
 

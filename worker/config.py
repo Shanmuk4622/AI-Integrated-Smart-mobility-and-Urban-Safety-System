@@ -5,12 +5,12 @@ import os
 # ==========================================
 
 # 1. Identity
-JUNCTION_ID = 3  # Default ID for this worker
-LOCATION_NAME = "D-mart" # Junction Location Description
+JUNCTION_ID = 5  # UPDATED
+LOCATION_NAME = "Hydrabad route" # UPDATED
 
 # GEOGRAPHIC COORDINATES (Decimal Degrees)
-LATITUDE = 16.509903927694992
-LONGITUDE = 80.51668779511127
+LATITUDE = 17.425069191493133
+LONGITUDE = 78.4861838264351
 
 # 2. Input
 # Path to video file OR RTSP Stream URL
@@ -24,12 +24,16 @@ LP_MODEL_PATH = os.path.join(BASE_DIR, "assets", "license_plate_detector.pt")
 
 # 4. Output Behavior
 SHOW_GUI = True         # Set to True to see the window, False for headless mode
-SAVE_VIDEO = True      # Set to True to save processed video
+SAVE_VIDEO = False      # UPDATED
 OUTPUT_DIR = os.path.join(BASE_DIR, "processed_output")
 
-# 5. Processing
+# 5. Processing / Tuning
 LOG_INTERVAL = 5.0      # Seconds between DB syncs
 CONFIDENCE_THRESHOLD = 0.5
+
+# Speed Estimation Calibration
+SPEED_CALCULATION_FPS = 10  # UPDATED
+PIXELS_PER_METER = 50       # How many pixels represent 1 meter (Calibrate this per camera view!)
 
 # Ensure output directory exists
 if SAVE_VIDEO and not os.path.exists(OUTPUT_DIR):

@@ -195,7 +195,7 @@ class SupabaseService:
         except Exception as e:
             print(f"ERROR: Failed to log worker health: {e}")
 
-    def update_junction_info(self, junction_id: int, name: str, latitude: float, longitude: float):
+    def update_junction_info(self, junction_id: int, name: str, latitude: float, longitude: float, video_source: str = None, fps: int = 30, ppm: int = 50):
         """Updates the junction's static info (name, lat, long) on startup."""
         try:
             # Check if exists first
@@ -205,6 +205,9 @@ class SupabaseService:
                 "name": name,
                 "latitude": latitude,
                 "longitude": longitude,
+                "video_source": video_source,
+                "fps": int(fps),
+                "ppm": int(ppm),
                 "status": "active"
             }
             
@@ -216,9 +219,9 @@ class SupabaseService:
                 print(f"DEBUG: Update response: {update_response}")
                 print(f"DEBUG: Updated Junction {junction_id} info: {name} @ {latitude}, {longitude}")
             else:
-                # Insert (Optional, if we want auto-registration)
+                # Insert (Optional, if we want auto-registered)
                 data["id"] = junction_id
-                data["video_source"] = "auto-registered" # Placeholder
+                # video_source is already in data
                 insert_response = self.supabase.table("junctions").insert(data).execute()
                 print(f"DEBUG: Insert response: {insert_response}")
                 print(f"DEBUG: Registered New Junction {junction_id}")

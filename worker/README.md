@@ -13,36 +13,69 @@ Every frame is passed through the **YOLOv8 Nano (yolov8n.pt)** neural network.
 **File**: `sort/sort.py`
 Raw detections are stateless (frame-by-frame). To understand flow, we need to know if the car in Frame 1 is the same as the car in Frame 2.
 - **Algorithm**: **SORT (Simple Online and Realtime Tracking)**.
-- **Logic**: It uses Kalman Filters to predict where a car *should* be in the next frame. If a detection matches that prediction (IoU - Intersection over Union), it is assigned the same **Unique ID (Track ID)**.
-- **Benefit**: Allows us to count unique vehicles and calculate lane density over time, rather than just per-frame counts.
+- **Logic**: It uses Kalman Filters to predict where a car *should* be in the next frame. If a detection matches that prediction (IoU), it is assigned the same **Unique ID (Track ID)**.
+- **Benefit**: Allows us to count unique vehicles and calculate lane density over time.
 
 ### 3. Violation Logic & Rules
 **File**: `core/processor.py` & `core/traffic_rules.py`
 Once we have tracks, we apply spatial rules:
-- **Wrong Way**: We track the vector of movement (History of Y-coordinates). If a vehicle moves *up* (negative Y) in a lane designated for *down* movement, it triggers a violation.
-- **Ambulance Detection**: A secondary check analyzes the color spectrum of large vehicles. If a significant percentage of pixels are "Emergency Red/Orange", it flags an Ambulance, which triggers high-priority signal changes.
-- **Plate Recognition**: Every 5th frame, an **EasyOCR** pass checks relevant bounding boxes for text. To prevent flickering, we use a "Plate Smoother" (`PlateSmoother` class) that keeps the highest-confidence reading for each ID.
+- **Wrong Way**: We track the vector of movement. If a vehicle moves *against* the flow, it triggers a violation.
+- **Ambulance Detection**: A secondary check analyzes the color spectrum of large vehicles (Red/Orange) to flag Ambulances.
+- **Speed Estimation**: Using pixels-per-meter calibration to estimate vehicle velocity.
+- **Plate Recognition**: **EasyOCR** reads text from bounding boxes on demand.
 
 ### 4. Cloud Synchronization (Supabase)
 **File**: `services/supabase_client.py`
-The worker does not store heavy data locally.
-- **Startup**: It registers itself (Name, Coordinates) in the `junctions` table.
+- **Startup**: Registers/Updates its Identity (ID, Status, FPS, PPM) in the `junctions` table.
+- **Heartbeat**: Pushes `worker_health` (FPS, CPU, Detections) every 30s.
 - **Real-Time**: 
-    - **Traffic Logs**: Pushes aggregated stats (Vehicle Count, Density) every 5 seconds to `traffic_logs`.
-    - **Violations**: Pushes events *immediately* to the `violations` table.
+    - **Traffic Logs**: Pushes density stats every 5s to `traffic_logs`.
+    - **Violations**: Pushes events + images *immediately* to `violations`.
 
 ---
 
-## ⚙️ Configuration
-**Everything** is controlled via `worker/config.py`. You do not need to edit code to change settings.
+## ⚙️ Configuration (The "Control Panel")
 
-```python
-# worker/config.py
-VIDEO_SOURCE = "Videos/sample3.mp4" # or RTSP URL
-COORDINATES = "40.7128,-74.0060" # Updates the map automatically
-```
+**Everything** is controlled via **`worker/config.py`**. You do not need to edit code.
+
+| Setting | Description |
+| :--- | :--- |
+| `JUNCTION_ID` | **Unique Integer**. Change this (4, 5, 6...) to create a new junction. |
+| `LOCATION_NAME` | Text name (e.g., "Main St") shown on the Admin Dashboard. |
+| `LATITUDE/LONGITUDE` | GPS Coordinates. The Map marker moves here automatically. |
+| `VIDEO_SOURCE` | Path to `.mp4` file or **RTSP URL** (e.g., `rtsp://admin:pass@192.168.1.10/stream`). |
+| `SPEED_CALCULATION_FPS` | Set this to your video's FPS (e.g., 30) for accurate speed math. |
+| `PIXELS_PER_METER` | **Calibration**: How many pixels = 1 meter? (Default: 50). Decrease if cars look slow. |
+| `SHOW_GUI` | `True` to see the window, `False` for headless servers. |
+
+---
 
 ## 🚀 Execution Flow
-1. Run `run_worker.bat`.
-2. Python Process starts -> Loads Models -> Connects to Supabase.
-3. Main Loop: `Capture -> YOLO -> SORT -> Rules -> Visualize -> Sync`.
+
+### 1. Setup
+Make sure you have the `.env` file with `SUPABASE_URL` and `SUPABASE_KEY` in `worker/`.
+
+### 2. Run
+Simply execute the batch script:
+```powershell
+.\run_worker.bat
+```
+This script handles:
+- Python Environment Activation (`.venv`)
+- Dependency Checks (`pip install...`)
+- Cache Clearing
+- Starting the Process
+
+### 3. Monitoring
+Check the **Admin Dashboard** (`/admin/junctions`) to see your worker online!
+
+---
+
+## 🔧 Troubleshooting
+
+*   **"Database Sync Error"**: Check your `.env` keys.
+*   **"Video Open Failed"**: Check the `VIDEO_SOURCE` path. Use absolute paths if unsure.
+*   **"Slow Performance"**: 
+    - Reduce resolution of input video.
+    - `SHOW_GUI = False` speeds up processing.
+    - Ensure CUDA (NVIDIA GPU) is installed.

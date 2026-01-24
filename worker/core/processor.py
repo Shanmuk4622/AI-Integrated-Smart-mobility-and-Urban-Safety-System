@@ -186,7 +186,19 @@ class JunctionProcessor:
         self.tracker = Sort(max_age=30, min_hits=3, iou_threshold=0.3)
         self.car_smoother = BoxSmoother(window=10)
         self.plate_smoother = PlateSmoother(bbox_window=10)
-        self.speed_estimator = SpeedEstimator(fps=30, pixels_per_meter=50)
+        # Configurable Speed Estimation
+        fps = 30
+        ppm = 50
+        if self.config:
+             fps = getattr(self.config, 'SPEED_CALCULATION_FPS', 30)
+             ppm = getattr(self.config, 'PIXELS_PER_METER', 50)
+             
+        if self.logger:
+            self.logger.info(f"Speed Est. Config: FPS={fps}, PPM={ppm}")
+        else:
+            print(f"Speed Est. Config: FPS={fps}, PPM={ppm}")
+
+        self.speed_estimator = SpeedEstimator(fps=fps, pixels_per_meter=ppm)
         self.perf_monitor = PerformanceMonitor()
         self.last_health_log = time.time()
         
@@ -240,7 +252,10 @@ class JunctionProcessor:
                 junction_id=self.junction_id,
                 name=self.config.LOCATION_NAME,
                 latitude=self.config.LATITUDE,
-                longitude=self.config.LONGITUDE
+                longitude=self.config.LONGITUDE,
+                video_source=self.video_source,
+                fps=fps,
+                ppm=ppm
             )
 
     def detect_ambulance(self, frame, box):

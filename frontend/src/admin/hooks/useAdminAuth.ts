@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 interface AdminUser {
     id: string; // UUID from admin_users (or auth.users)
     email: string;
-    role: 'super_admin' | 'traffic_manager' | 'operator' | 'auditor';
+    role: 'super_admin' | 'traffic_manager' | 'operator' | 'auditor' | 'analyst';
     full_name: string;
 }
 

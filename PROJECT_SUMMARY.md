@@ -81,10 +81,11 @@ Edit `worker/config.py` to change:
 - `LOCATION_NAME`: "Main St & 5th Ave".
 - `COORDINATES`: "lat,long" for the map.
 
-**Run Multiple Workers**:
-```powershell
-.\run_junction_2.bat
-```
+- `LOCATION_NAME`: "Main St & 5th Ave".
+- `COORDINATES`: "lat,long" for the map.
+
+**To Add More Junctions**:
+Just change the `JUNCTION_ID` in `config.py` and run the worker on a different machine/terminal!
 
 ### 4. Running the Dashboard
 ```powershell
@@ -132,6 +133,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE violations;
 | `name` | text | Display Name (e.g., "Downtown") |
 | `location` | text | GPS Coordinates ("40.71,-74.00") |
 | `status` | text | 'active', 'offline', 'maintenance' |
+| `ppm` | int | Pixels Per Meter (Calibration) |
+| `fps` | int | Speed Calculation FPS |
 
 ### `traffic_logs`
 | Column | Type | Description |
@@ -147,6 +150,14 @@ ALTER PUBLICATION supabase_realtime ADD TABLE violations;
 | `junction_id` | int8 | Foreign Key to Junctions |
 | `violation_type` | text | 'Wrong Way', 'Red Light' |
 | `image_url` | text | Link to violation snapshot |
+
+### `worker_health`
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `junction_id` | int8 | Foreign Key to Junctions |
+| `fps` | float | Processing Speed |
+| `cpu_usage` | float | System Load |
+| `last_heartbeat` | timestamptz | Last active ping |
 
 ---
 

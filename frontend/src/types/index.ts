@@ -116,3 +116,70 @@ export interface SupabaseRealtimePayload<T> {
     old: T | null;
     eventType: 'INSERT' | 'UPDATE' | 'DELETE';
 }
+
+// ===================================
+// Admin Panel Types
+// ===================================
+
+export type ViolationStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'appealed';
+
+export interface AdminViolation {
+    id: number;
+    junction_id: number;
+    violation_type: 'Wrong Way' | 'Red Light' | 'Speeding' | 'No Helmet';
+    image_url?: string;
+    timestamp: string;
+    status: ViolationStatus;
+    confidence_score?: number;
+    vehicle_speed?: number;
+    license_plate?: string;
+    reviewed_by?: string;
+    reviewed_at?: string;
+    review_notes?: string;
+    // Joined data
+    junctions?: {
+        name: string;
+        latitude: number;
+        longitude: number;
+    };
+}
+
+export interface Citation {
+    id: number;
+    citation_number: string;
+    violation_id: number;
+    fine_amount: number;
+    due_date: string;
+    paid: boolean;
+    paid_at?: string;
+    payment_method?: string;
+    payment_reference?: string;
+    sent_via?: string;
+    sent_at?: string;
+    created_at: string;
+    created_by?: string;
+    violation?: AdminViolation;
+}
+
+export interface ViolationStats {
+    total_pending: number;
+    total_approved: number;
+    total_rejected: number;
+    approved_today: number;
+    rejected_today: number;
+    total_citations: number;
+    revenue_collected: number;
+}
+
+export interface AdminUser {
+    id: string;
+    email: string;
+    full_name: string;
+    role: 'super_admin' | 'traffic_manager' | 'operator' | 'auditor' | 'analyst';
+    department?: string;
+    phone?: string;
+    is_active: boolean;
+    last_login?: string;
+    created_at: string;
+}
+
