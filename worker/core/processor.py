@@ -8,6 +8,7 @@ import sys
 import os
 import time
 import torch
+import psutil
 
 # Add worker root to path so we can import 'sort' and 'services'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -76,6 +77,70 @@ class PlateSmoother:
              return np.stack(self.bbox_buffers[track_id], axis=0).mean(axis=0).tolist()
         return None
 
+class SpeedEstimator:
+    """Estimate vehicle speed based on pixel movement"""
+    def __init__(self, fps=30, pixels_per_meter=50):
+        self.fps = fps
+        self.pixels_per_meter = pixels_per_meter  # Calibration needed
+        self.prev_positions = {}
+        self.speeds = {}
+    
+    def update(self, track_id, bbox):
+        """Calculate speed based on bbox center movement"""
+        center_x = (bbox[0] + bbox[2]) / 2
+        center_y = (bbox[1] + bbox[3]) / 2
+        current_pos = np.array([center_x, center_y])
+        
+        if track_id in self.prev_positions:
+            prev_pos = self.prev_positions[track_id]
+            
+            # Calculate pixel distance
+            pixel_distance = np.linalg.norm(current_pos - prev_pos)
+            
+            # Convert to meters
+            meters = pixel_distance / self.pixels_per_meter
+            
+            # Convert to km/h (assuming 1 frame = 1/fps seconds)
+            speed_mps = meters * self.fps
+            speed_kmh = speed_mps * 3.6
+            
+            self.speeds[track_id] = speed_kmh
+        
+        self.prev_positions[track_id] = current_pos
+        return self.speeds.get(track_id, 0.0)
+
+class PerformanceMonitor:
+    def __init__(self):
+        self.frame_times = deque(maxlen=30)
+        self.detection_confidences = deque(maxlen=100)
+        self.total_detections = 0
+        self.process = psutil.Process()
+    
+    def log_frame(self, frame_time):
+        self.frame_times.append(frame_time)
+    
+    def log_detection(self, confidence):
+        self.detection_confidences.append(confidence)
+        self.total_detections += 1
+    
+    def get_fps(self):
+        if len(self.frame_times) < 2:
+            return 0.0
+        avg_time = sum(self.frame_times) / len(self.frame_times)
+        return 1.0 / avg_time if avg_time > 0 else 0.0
+    
+    def get_cpu_usage(self):
+        return self.process.cpu_percent(interval=None)
+    
+    def get_memory_usage(self):
+        mem = self.process.memory_info()
+        return (mem.rss / 1024 / 1024)  # MB
+    
+    def get_avg_confidence(self):
+        if not self.detection_confidences:
+            return 0.0
+        return sum(self.detection_confidences) / len(self.detection_confidences)
+
 # --- WORKER CLASS ---
 
 class JunctionProcessor:
@@ -101,14 +166,14 @@ class JunctionProcessor:
             self.coco_model.to('cuda')
             self.lp_model.to('cuda')
             if self.logger:
-                self.logger.info("Using GPU")
+                self.logger.info("Using GPU for inference")
             else:
-                print("Using GPU")
+                print("Using GPU for inference")
         else:
             if self.logger:
-                self.logger.info("Using CPU")
+                self.logger.warning("GPU not available, using CPU")
             else:
-                print("Using CPU")
+                print("GPU not available, using CPU")
         
         # Initialize EasyOCR after YOLO models to prevent CUDA conflicts
         if self.logger:
@@ -116,15 +181,22 @@ class JunctionProcessor:
         else:
             print("Initializing EasyOCR...")
         self.reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available())
-        
-        # Initialize SORT Tracker
+
+        # Trackers
         self.tracker = Sort(max_age=30, min_hits=3, iou_threshold=0.3)
+        self.car_smoother = BoxSmoother(window=10)
+        self.plate_smoother = PlateSmoother(bbox_window=10)
+        self.speed_estimator = SpeedEstimator(fps=30, pixels_per_meter=50)
+        self.perf_monitor = PerformanceMonitor()
+        self.last_health_log = time.time()
+        
+        # Data
+        self.vehicles_class_ids = [2, 3, 5, 7] # car, motorcycle, bus, truck (COCO)
+        self.latest_lp_boxes = []
+        self.vehicle_speeds = {}
+        self.active_emergency_vehicles = {}  # track_id -> emergency_db_id
+        
         self.traffic_controller = TrafficController()
-        
-        self.car_smoother = BoxSmoother()
-        self.plate_smoother = PlateSmoother()
-        
-        self.vehicles_class_ids = [2, 3, 5, 7] # car, motorcycle, bus, truck
         
         self.cap = cv2.VideoCapture(self.video_source)
         if not self.cap.isOpened():
@@ -158,7 +230,6 @@ class JunctionProcessor:
 
         # State
         self.wrong_way_violations = []
-        self.last_log_time = 0
         self.last_log_time = 0
         self.last_frame_time = 0
         self.latest_lp_boxes = [] # Store for visualization
@@ -211,6 +282,7 @@ class JunctionProcessor:
         else:
             print(f"Junction {self.junction_id}: Processing started.")
         while self.cap.isOpened():
+            frame_start = time.time()
             ret, frame = self.cap.read()
             if not ret:
                 if self.logger:
@@ -231,6 +303,10 @@ class JunctionProcessor:
             # Tracking
             tracks = self.tracker.update(np.asarray(detections))
             
+            # Performance Monitoring
+            frame_time = time.time() - frame_start
+            self.perf_monitor.log_frame(frame_time)
+            
             # License Plates (Optimize: Run less frequently)
             frame_num = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
             lp_boxes = []
@@ -244,10 +320,90 @@ class JunctionProcessor:
             current_lane_density = len(tracks)
             ambulance_in_frame = False
             
+            # Match LPs to tracks
+            matched_lps = {}
+            for tr in tracks:
+                x1, y1, x2, y2, tid = tr
+                tid = int(tid)
+                for lpb in lp_boxes:
+                    lx1, ly1, lx2, ly2, lconf, lcls = lpb
+                    lcx, lcy = (lx1+lx2)/2, (ly1+ly2)/2
+                    if x1 < lcx < x2 and y1 < lcy < y2:
+                        matched_lps[tid] = [lx1, ly1, lx2, ly2]
+                        break
+
             for tr in tracks:
                 x1, y1, x2, y2, tid = tr
                 tid = int(tid)
                 bbox = self.car_smoother.update(tid, [x1, y1, x2, y2])
+                
+                # Speed Calculation
+                speed_kmh = self.speed_estimator.update(tid, bbox)
+                self.vehicle_speeds[tid] = speed_kmh
+                
+                # Determine class based on IOU with detections
+                # Simple approach: find closest detection center
+                cls_id = -1
+                score = 0.0
+                cx, cy = (x1+x2)/2, (y1+y2)/2
+                min_dist = 999999
+                
+                for d in detections:
+                    dx, dy, dx2, dy2, dscore = d
+                    dcx, dcy = (dx+dx2)/2, (dy+dy2)/2
+                    dist = (cx-dcx)**2 + (cy-dcy)**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        score = dscore
+                        # We need original class ID, but we only kept specific classes
+                        # Re-check results to find class ID (optimization needed)
+                        for orig_d in results.boxes.data.tolist():
+                             if abs(orig_d[0]-dx)<1 and abs(orig_d[1]-dy)<1:
+                                 cls_id = int(orig_d[5])
+                                 break
+                
+                self.perf_monitor.log_detection(score)
+
+                # Emergency Vehicle Detection
+                if cls_id == 7: # Truck as Ambulance Proxy for this demo
+                    if self.detect_ambulance(frame, bbox):
+                        ambulance_in_frame = True
+                        if tid not in self.active_emergency_vehicles:
+                            # Estimate direction (simplified for now)
+                            direction = 'unknown' 
+                            emergency_id = self.db.log_emergency_vehicle(
+                                junction_id=self.junction_id,
+                                vehicle_type='ambulance', # Proxy
+                                direction=direction, 
+                                estimated_speed=speed_kmh
+                            )
+                            if emergency_id:
+                                self.active_emergency_vehicles[tid] = emergency_id
+                        else:
+                            eid = self.active_emergency_vehicles[tid]
+                            self.db.update_emergency_vehicle_last_seen(eid)
+
+                # --- License Plate Logic ---
+                license_plate = None
+                if tid in matched_lps:
+                    lp_box = matched_lps[tid]
+                    # Update plate bbox smoother
+                    self.plate_smoother.update_bbox(tid, lp_box)
+                    
+                    plate_crop = frame[int(lp_box[1]):int(lp_box[3]), int(lp_box[0]):int(lp_box[2])]
+                    if plate_crop.shape[0] > 0 and plate_crop.shape[1] > 0:
+                        p_text, p_score = self.read_license_plate(plate_crop)
+                        if p_text:
+                            self.plate_smoother.update_text(tid, p_text, p_score)
+                    
+                    best = self.plate_smoother.get_best_text(tid)
+                    if best['text'] != '0' and best['score'] > 0.4:
+                        license_plate = best['text']
+
+                # --- Violation Logic ---
+                violation_detected = False
+                violation_type = None
+
                 sx1, sy1, sx2, sy2 = map(int, bbox)
 
                 color = (0, 255, 0) # Green (Normal)
@@ -258,7 +414,7 @@ class JunctionProcessor:
                      cv2.putText(frame, "WRONG WAY!", (sx1, sy1 - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                      if tid not in self.wrong_way_violations:
                          self.wrong_way_violations.append(tid)
-                         self.db.log_violation(self.junction_id, "Wrong Way") # Log immediately
+                         violation_type = "Wrong Way" # Set violation type for enhanced logging
 
                 if self.detect_ambulance(frame, bbox):
                     color = (255, 165, 0) # Orange/Blue for ambulance
@@ -267,25 +423,6 @@ class JunctionProcessor:
                 
                 # Main Bounding Box
                 cv2.rectangle(frame, (sx1, sy1), (sx2, sy2), color, 2)
-                
-                # Find Plate (Optimized: Run every 5 frames or if unknown)
-                existing_text = self.plate_smoother.get_best_text(tid)
-                should_run_ocr = (self.tracker.frame_count % 5 == 0) or (existing_text['text'] == '0')
-
-                if should_run_ocr:
-                    for lp in lp_boxes:
-                        lx1, ly1, lx2, ly2, lscore, _ = lp
-                        lx_c, ly_c = (lx1+lx2)/2, (ly1+ly2)/2
-                        if sx1 < lx_c < sx2 and sy1 < ly_c < sy2:
-                            # It's a match
-                            # Update plate bbox smoother
-                            self.plate_smoother.update_bbox(tid, [lx1, ly1, lx2, ly2])
-                            
-                            plate_crop = frame[int(ly1):int(ly2), int(lx1):int(lx2)]
-                            if plate_crop.shape[0] > 0 and plate_crop.shape[1] > 0:
-                                p_text, p_score = self.read_license_plate(plate_crop)
-                                if p_text:
-                                    self.plate_smoother.update_text(tid, p_text, p_score)
                 
                 # --- BETTER DRAWING LOGIC ---
                 # Draw Plate BBox if available
@@ -321,21 +458,68 @@ class JunctionProcessor:
                 cv2.rectangle(frame, (int(box_x1), int(box_y1)), (int(box_x2), int(box_y2)), color, -1) # Filled box with car color
                 cv2.putText(frame, label, (int(sx1 + 5), int(box_y2 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
+                # Enhanced Violation Logging
+                if violation_type:
+                    # Crop violation area
+                    # Ensure coords are within frame
+                    h, w, _ = frame.shape
+                    vx1, vy1, vx2, vy2 = max(0, int(x1)), max(0, int(y1)), min(w, int(x2)), min(h, int(y2))
+                    violation_crop = frame[vy1:vy2, vx1:vx2]
+                    
+                    # Log to DB
+                    violation_id = self.db.log_violation_enhanced(
+                        junction_id=self.junction_id,
+                        violation_type=violation_type,
+                        confidence_score=float(score),
+                        vehicle_speed=float(speed_kmh),
+                        license_plate=license_plate,
+                        image_url=None # Placeholder
+                    )
+                    
+                    # Upload Image
+                    if violation_id and violation_crop.size > 0:
+                        self.db.upload_violation_image(violation_crop, self.junction_id, violation_id)
+            
+            # Log Worker Health
+            if time.time() - self.last_health_log > 30:
+                self.db.log_worker_health(
+                    junction_id=self.junction_id,
+                    fps=self.perf_monitor.get_fps(),
+                    cpu_usage=self.perf_monitor.get_cpu_usage(),
+                    memory_usage=self.perf_monitor.get_memory_usage(),
+                    avg_detection_confidence=self.perf_monitor.get_avg_confidence(),
+                    total_detections=self.perf_monitor.total_detections,
+                    status='running'
+                )
+                self.last_health_log = time.time()
+
             # Traffic Logic
             signal_status = self.traffic_controller.calculate_signal_duration(
                 lane_density=current_lane_density, 
                 ambulance_detected=ambulance_in_frame
             )
             
-            # Periodic Data Sync to Supabase
+            # Logging Traffic Data
             if time.time() - self.last_log_time > self.config.LOG_INTERVAL:
-                congestion_level = "High" if current_lane_density > 15 else "Low"
-                self.db.log_traffic_data(
-                    junction_id=self.junction_id,
-                    vehicle_count=current_lane_density,
-                    congestion_level=congestion_level,
-                    avg_speed=0 # Placeholder
-                )
+                congestion_level = "Low"
+                if current_lane_density > 5: congestion_level = "Medium"
+                if current_lane_density > 10: congestion_level = "High"
+
+                if self.logger:
+                    self.logger.info(f"Junction {self.junction_id} Stats: Count={current_lane_density}, Speed={0.0}, Congestion={congestion_level}")
+                    if ambulance_in_frame:
+                         self.logger.info(f"🚑 Ambulance Detected at Junction {self.junction_id}!")
+                else:
+                    print(f"[{time.strftime('%H:%M:%S')}] Junction {self.junction_id}: {current_lane_density} vehicles. Congestion: {congestion_level}")
+                    if ambulance_in_frame:
+                        print("🚑 Ambulance Detected!")
+
+                # Calculate avg speed for frame
+                avg_speed = 0.0
+                if len(self.vehicle_speeds) > 0:
+                     avg_speed = sum(self.vehicle_speeds.values()) / len(self.vehicle_speeds)
+
+                self.db.log_traffic_data(self.junction_id, current_lane_density, congestion_level, avg_speed)
                 self.last_log_time = time.time()
                 if self.logger:
                     self.logger.debug(f"Synced: Density={current_lane_density}, Signal={signal_status['action']}")

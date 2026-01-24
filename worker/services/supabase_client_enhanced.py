@@ -141,8 +141,6 @@ class SupabaseService:
             "vehicle_type": vehicle_type,
             "direction": direction,
             "estimated_speed": estimated_speed,
-            "detected_at": datetime.now().isoformat(),
-            "last_seen_at": datetime.now().isoformat(),
             "status": "active",
             "priority_level": 1
         }
@@ -160,10 +158,10 @@ class SupabaseService:
             return None
 
     def update_emergency_vehicle_last_seen(self, emergency_id: int):
-        """Update last seen timestamp for active active emergency vehicle"""
+        """Update last seen timestamp for active emergency vehicle"""
         try:
             self.supabase.table("emergency_vehicles")\
-                .update({"last_seen_at": datetime.now().isoformat()})\
+                .update({"last_seen_at": "NOW()"})\
                 .eq("id", emergency_id)\
                 .execute()
         except Exception as e:
@@ -181,10 +179,8 @@ class SupabaseService:
             "cpu_usage": cpu_usage,
             "memory_usage": memory_usage,
             "avg_detection_confidence": avg_detection_confidence,
-            "avg_detection_confidence": avg_detection_confidence,
             "total_detections": total_detections,
-            "status": status,
-            "last_heartbeat": datetime.now().isoformat()
+            "status": status
         }
         
         try:

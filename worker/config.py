@@ -6,11 +6,11 @@ import os
 
 # 1. Identity
 JUNCTION_ID = 3  # Default ID for this worker
-LOCATION_NAME = "VIT-AP University" # Junction Location Description
+LOCATION_NAME = "D-mart" # Junction Location Description
 
 # GEOGRAPHIC COORDINATES (Decimal Degrees)
-LATITUDE = 16.490026
-LONGITUDE = 80.513759
+LATITUDE = 16.509903927694992
+LONGITUDE = 80.51668779511127
 
 # 2. Input
 # Path to video file OR RTSP Stream URL
@@ -24,7 +24,7 @@ LP_MODEL_PATH = os.path.join(BASE_DIR, "assets", "license_plate_detector.pt")
 
 # 4. Output Behavior
 SHOW_GUI = True         # Set to True to see the window, False for headless mode
-SAVE_VIDEO = False      # Set to True to save processed video
+SAVE_VIDEO = True      # Set to True to save processed video
 OUTPUT_DIR = os.path.join(BASE_DIR, "processed_output")
 
 # 5. Processing
