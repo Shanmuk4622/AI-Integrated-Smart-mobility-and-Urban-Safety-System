@@ -12,6 +12,7 @@ import {
     getJunctionsWithTraffic,
     getRecentTrafficLogs,
     subscribeToTrafficUpdates,
+    subscribeToJunctionUpdates,
     getViolations,
     type DashboardStats,
     type JunctionWithTraffic,
@@ -339,8 +340,6 @@ function DashboardMap({
         );
     }
 
-    console.log('🗺️ Dashboard Map rendering with junctions:', junctions);
-
     return (
         <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['places', 'marker']}>
             <Map
@@ -436,18 +435,47 @@ export default function AdminDashboard() {
         }
     }, [selectedJunction]);
 
+    // Consolidate real-time subscriptions
     useEffect(() => {
-        const unsubscribe = subscribeToTrafficUpdates((log) => {
+        // Subscribe to traffic logs (also updates status to active)
+        const trafficUnsub = subscribeToTrafficUpdates((log) => {
             setJunctions(prev => prev.map(j =>
                 j.id === log.junction_id
-                    ? { ...j, currentVehicleCount: log.vehicle_count, congestionLevel: log.congestion_level as 'Low' | 'Medium' | 'High', lastUpdate: new Date().toISOString() }
+                    ? {
+                        ...j,
+                        currentVehicleCount: log.vehicle_count,
+                        congestionLevel: log.congestion_level as 'Low' | 'Medium' | 'High',
+                        lastUpdate: new Date().toISOString(),
+                        status: 'active' // Infer active status from fresh data
+                    }
                     : j
             ));
+
             if (selectedJunction?.id === log.junction_id) {
                 setTrafficData(prev => [...prev.slice(-29), { timestamp: new Date().toISOString(), vehicleCount: log.vehicle_count }]);
+                // Update selected junction to active
+                setSelectedJunction(prev => prev ? { ...prev, status: 'active', lastUpdate: new Date().toISOString() } : null);
             }
         });
-        return unsubscribe;
+
+        // Subscribe to explicit status updates (e.g. going offline)
+        const junctionUnsub = subscribeToJunctionUpdates((updatedJunction) => {
+            console.log('📡 Junction Status Update:', updatedJunction);
+            setJunctions(prev => prev.map(j =>
+                j.id === updatedJunction.id
+                    ? { ...j, status: updatedJunction.status }
+                    : j
+            ));
+
+            if (selectedJunction?.id === updatedJunction.id) {
+                setSelectedJunction(prev => prev ? { ...prev, status: updatedJunction.status } : null);
+            }
+        });
+
+        return () => {
+            trafficUnsub();
+            junctionUnsub();
+        };
     }, [selectedJunction]);
 
     const formatCurrency = (amount: number) => {

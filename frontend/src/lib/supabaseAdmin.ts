@@ -552,3 +552,29 @@ export function subscribeToTrafficUpdates(
         supabase.removeChannel(channel);
     };
 }
+
+/**
+ * Subscribe to real-time junction status updates
+ */
+export function subscribeToJunctionUpdates(
+    callback: (junction: { id: number; status: string }) => void
+): () => void {
+    const channel = supabase
+        .channel('junction-updates')
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'junctions'
+            },
+            (payload) => {
+                callback(payload.new as { id: number; status: string });
+            }
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+}
