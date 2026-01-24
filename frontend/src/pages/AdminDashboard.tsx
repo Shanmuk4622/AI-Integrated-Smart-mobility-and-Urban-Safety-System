@@ -102,13 +102,16 @@ export default function AdminDashboard() {
         }
 
         if (junctionsData) {
-            // Fetch latest traffic stats for each junction
+            // Only get traffic data from last 5 minutes
+            const cutoffTime = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
             const enrichedJunctions = await Promise.all(
                 junctionsData.map(async (j) => {
                     const { data: log } = await supabase
                         .from('traffic_logs')
-                        .select('vehicle_count, congestion_level')
+                        .select('vehicle_count, congestion_level, timestamp')
                         .eq('junction_id', j.id)
+                        .gte('timestamp', cutoffTime) // ← Only recent data
                         .order('timestamp', { ascending: false })
                         .limit(1)
                         .single();
@@ -116,7 +119,8 @@ export default function AdminDashboard() {
                     return {
                         ...j,
                         vehicle_count: log?.vehicle_count || 0,
-                        congestion_level: log?.congestion_level || 'Low' // Store for map usage
+                        congestion_level: log?.congestion_level || 'Low',
+                        last_updated: log?.timestamp || null
                     };
                 })
             );

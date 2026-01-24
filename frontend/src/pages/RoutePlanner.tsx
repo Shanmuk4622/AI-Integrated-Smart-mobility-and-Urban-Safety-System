@@ -13,152 +13,303 @@ import type { Junction } from '../types';
 import '../styles/map.css';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const TRAFFIC_DATA_VALIDITY_MINUTES = 5;
 
-// --- Directions Component ---
-const Directions = ({
+// --- Multi-Route Directions Component ---
+const MultiRouteDirections = ({
     start,
     end,
-    onRouteChanged
+    onRoutesChanged,
+    rerouteKey,
+    junctions
 }: {
     start: google.maps.LatLngLiteral | null,
     end: google.maps.LatLngLiteral | null,
-    onRouteChanged: (route: google.maps.DirectionsResult | null) => void
+    onRoutesChanged: (routes: google.maps.DirectionsResult | null) => void,
+    rerouteKey?: number,
+    junctions: Junction[]
 }) => {
     const map = useMap();
     const routesLibrary = useMapsLibrary('routes');
     const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService>();
-    const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer>();
+    const [renderers, setRenderers] = useState<google.maps.DirectionsRenderer[]>([]);
 
-    // Initialize Service and Renderer
+    // Initialize service
     useEffect(() => {
-        if (!routesLibrary || !map) return;
+        if (!routesLibrary) return;
+        setDirectionsService(new routesLibrary.DirectionsService());
+    }, [routesLibrary]);
 
-        const service = new routesLibrary.DirectionsService();
-        const renderer = new routesLibrary.DirectionsRenderer({
-            map,
-            suppressMarkers: false,
-            polylineOptions: {
-                strokeColor: '#0066ff',
-                strokeWeight: 6,
-                strokeOpacity: 0.8
-            }
-        });
-
-        setDirectionsService(service);
-        setDirectionsRenderer(renderer);
-
-        return () => {
-            renderer.setMap(null);
-        };
-    }, [routesLibrary, map]);
-
-    // Calculate Route
+    // Calculate and display multiple routes
     useEffect(() => {
-        if (!directionsService || !directionsRenderer || !start || !end) return;
+        if (!directionsService || !map || !start || !end) return;
 
+        // Clear old renderers
+        renderers.forEach(r => r.setMap(null));
+        setRenderers([]);
+
+        console.log('🗺️ Requesting alternative routes...');
+
+        // Request routes with alternatives enabled
         directionsService.route({
             origin: start,
             destination: end,
             travelMode: google.maps.TravelMode.DRIVING,
-            provideRouteAlternatives: true
+            provideRouteAlternatives: true,  // Request up to 3 alternative routes
+            optimizeWaypoints: false
         }).then(response => {
-            directionsRenderer.setDirections(response);
-            onRouteChanged(response);
+            const routes = response.routes;
+            console.log(`✅ Found ${routes.length} route(s)`);
+
+            if (routes.length === 0) {
+                console.error('❌ No routes found');
+                onRoutesChanged(null);
+                return;
+            }
+
+            onRoutesChanged(response);
+
+            // Analyze each route for congestion
+            const routeAnalysis = routes.map((route, idx) => {
+                const path = route.overview_path;
+                let congestedJunctions = 0;
+
+                // Check if route passes near congested junctions
+                junctions.forEach(junction => {
+                    const j = junction as any;
+                    if (j.status !== 'active' || j.congestion_level !== 'High') return;
+
+                    const junctionPos = new google.maps.LatLng(junction.latitude, junction.longitude);
+
+                    for (const point of path) {
+                        const distance = google.maps.geometry.spherical.computeDistanceBetween(junctionPos, point);
+                        if (distance < 500) { // Within 500m
+                            congestedJunctions++;
+                            break;
+                        }
+                    }
+                });
+
+                return {
+                    index: idx,
+                    congestion: congestedJunctions,
+                    duration: route.legs[0].duration?.value || 0,
+                    distance: route.legs[0].distance?.value || 0
+                };
+            });
+
+            // Sort: prefer routes with NO congestion, then by duration
+            routeAnalysis.sort((a, b) => {
+                if (a.congestion !== b.congestion) return a.congestion - b.congestion;
+                return a.duration - b.duration;
+            });
+
+            const bestRouteIndex = routeAnalysis[0].index;
+
+            console.log('📊 Route Analysis:', routeAnalysis.map(r => ({
+                route: r.index + 1,
+                congestion: r.congestion + ' junctions',
+                duration: Math.round(r.duration / 60) + ' min',
+                recommended: r.index === bestRouteIndex ? '✅' : ''
+            })));
+
+            // Create renderer for each route
+            const newRenderers = routes.map((route, idx) => {
+                const isBest = idx === bestRouteIndex;
+                const analysis = routeAnalysis.find(r => r.index === idx)!;
+                const hasCongestion = analysis.congestion > 0;
+
+                return new routesLibrary!.DirectionsRenderer({
+                    map,
+                    directions: { ...response, routes: [route] },
+                    routeIndex: 0,
+                    suppressMarkers: !isBest, // Only show markers on best route
+                    polylineOptions: {
+                        strokeColor: isBest
+                            ? '#00ff88'  // Green = Best route
+                            : hasCongestion
+                                ? '#ff4444'  // Red = Has congestion
+                                : '#888888', // Grey = Alternative
+                        strokeWeight: isBest ? 7 : 4,
+                        strokeOpacity: isBest ? 1.0 : 0.6,
+                        zIndex: isBest ? 100 : 50
+                    }
+                });
+            });
+
+            setRenderers(newRenderers);
+
         }).catch(err => {
-            console.error("Directions request failed", err);
-            onRouteChanged(null);
+            console.error('❌ Route calculation failed:', err);
+            onRoutesChanged(null);
         });
 
-    }, [directionsService, directionsRenderer, start, end, onRouteChanged]);
+        return () => {
+            renderers.forEach(r => r.setMap(null));
+        };
+    }, [directionsService, map, start, end, rerouteKey, junctions]);
 
     return null;
 };
 
-// --- Check Junction Proximity ---
+// Check route proximity
 const checkRouteProximity = (junctions: Junction[], route: google.maps.DirectionsResult | null) => {
-    if (!route || !route.routes[0] || !route.routes[0].overview_path) return [];
+    if (!route || !route.routes[0]) return [];
 
     const path = route.routes[0].overview_path;
-    const congestedInPath: Junction[] = [];
-    const thresholdMeters = 500;
+    const congested: Junction[] = [];
 
     junctions.forEach(junction => {
-        // Congestion check logic (mocked or real)
-        // Assuming junction has congestion_level if extended, but base Junction Type might not.
-        // We'll cast to any if needed or extend the type properly in a real app.
         const j = junction as any;
-        if (j.congestion_level !== 'High') return;
+        if (j.status !== 'active' || j.congestion_level !== 'High') return;
 
-        const junctionLatLng = new google.maps.LatLng(junction.latitude, junction.longitude);
+        const jPos = new google.maps.LatLng(junction.latitude, junction.longitude);
 
-        let minDistance = Infinity;
         for (const point of path) {
-            // computeDistanceBetween requires 'geometry' library
-            const dist = google.maps.geometry.spherical.computeDistanceBetween(junctionLatLng, point);
-            if (dist < minDistance) minDistance = dist;
-        }
-
-        if (minDistance < thresholdMeters) {
-            congestedInPath.push(junction);
+            const dist = google.maps.geometry.spherical.computeDistanceBetween(jPos, point);
+            if (dist < 500) {
+                congested.push(junction);
+                break;
+            }
         }
     });
 
-    return congestedInPath;
+    return congested;
 };
-
 
 export default function RoutePlanner() {
     const [startPoint, setStartPoint] = useState<google.maps.LatLngLiteral | null>(null);
     const [endPoint, setEndPoint] = useState<google.maps.LatLngLiteral | null>(null);
     const [startQuery, setStartQuery] = useState("");
     const [endQuery, setEndQuery] = useState("");
-
     const [junctions, setJunctions] = useState<Junction[]>([]);
-    const [congestedJunctionsInPath, setCongestedJunctionsInPath] = useState<Junction[]>([]);
+    const [congestedInPath, setCongestedInPath] = useState<Junction[]>([]);
+    const [rerouteKey, setRerouteKey] = useState(0);
+    const [lastUpdate, setLastUpdate] = useState(new Date());
+    const [isRerouting, setIsRerouting] = useState(false);
+    const [routeInfo, setRouteInfo] = useState<{
+        distance: string;
+        duration: string;
+        congestionCount: number;
+    } | null>(null);
 
-    useEffect(() => {
-        const fetchJunctions = async () => {
-            const { data: junctionsData } = await supabase.from('junctions').select('*');
-            if (junctionsData) {
-                const enrichedJunctions = await Promise.all(
-                    junctionsData.map(async (j) => {
-                        const { data: log } = await supabase
-                            .from('traffic_logs')
-                            .select('vehicle_count, congestion_level')
-                            .eq('junction_id', j.id)
-                            .order('timestamp', { ascending: false })
-                            .limit(1)
-                            .single();
-                        return { ...j, vehicle_count: log?.vehicle_count || 0, congestion_level: log?.congestion_level || 'Low' };
-                    })
-                );
-                console.log('🗺️ RoutePlanner junctions:', enrichedJunctions);
-                setJunctions(enrichedJunctions);
-            }
-        };
-        fetchJunctions();
+    const fetchJunctions = useCallback(async () => {
+        const { data } = await supabase.from('junctions').select('*');
+        if (!data) return;
+
+        const cutoff = new Date(Date.now() - TRAFFIC_DATA_VALIDITY_MINUTES * 60 * 1000).toISOString();
+
+        const enriched = await Promise.all(
+            data.map(async (j) => {
+                const { data: log } = await supabase
+                    .from('traffic_logs')
+                    .select('vehicle_count, congestion_level, timestamp')
+                    .eq('junction_id', j.id)
+                    .gte('timestamp', cutoff)
+                    .order('timestamp', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                return {
+                    ...j,
+                    vehicle_count: log?.vehicle_count || 0,
+                    congestion_level: log?.congestion_level || 'Low'
+                };
+            })
+        );
+
+        setJunctions(enriched);
+        setLastUpdate(new Date());
     }, []);
 
-    const handleRouteChanged = useCallback((route: google.maps.DirectionsResult | null) => {
-        if (!route) {
-            setCongestedJunctionsInPath([]);
+    useEffect(() => {
+        fetchJunctions();
+
+        const interval = setInterval(fetchJunctions, 10000);
+
+        const channel = supabase
+            .channel('route-traffic')
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'traffic_logs' },
+                (payload: any) => {
+                    const log = payload.new;
+                    console.log('📊 Real-time traffic update:', {
+                        junction: log.junction_id,
+                        vehicles: log.vehicle_count,
+                        congestion: log.congestion_level
+                    });
+
+                    // Update junction state immediately
+                    setJunctions(prev => {
+                        const updated = prev.map(j =>
+                            j.id === log.junction_id
+                                ? { ...j, vehicle_count: log.vehicle_count, congestion_level: log.congestion_level }
+                                : j
+                        );
+
+                        // Check if this affects current route
+                        if (log.congestion_level === 'High' && startPoint && endPoint) {
+                            const affectedJunction = updated.find(j => j.id === log.junction_id);
+                            if (affectedJunction) {
+                                console.log(`⚠️ HIGH CONGESTION at ${affectedJunction.name}!`);
+                                console.log('🔄 Triggering automatic reroute...');
+
+                                // Show rerouting notification
+                                setIsRerouting(true);
+
+                                // Trigger reroute IMMEDIATELY
+                                setRerouteKey(k => k + 1);
+
+                                // Hide notification after 2 seconds
+                                setTimeout(() => setIsRerouting(false), 2000);
+                            }
+                        }
+
+                        return updated;
+                    });
+                }
+            )
+            .subscribe((status) => {
+                console.log('📡 Real-time subscription status:', status);
+            });
+
+        return () => {
+            clearInterval(interval);
+            supabase.removeChannel(channel);
+        };
+    }, [fetchJunctions, startPoint, endPoint]);
+
+    const handleRoutesChanged = useCallback((result: google.maps.DirectionsResult | null) => {
+        if (!result) {
+            setCongestedInPath([]);
+            setRouteInfo(null);
             return;
         }
 
-        // Ensure geometry library is loaded
         if (google.maps.geometry) {
-            const congested = checkRouteProximity(junctions, route);
-            setCongestedJunctionsInPath(congested);
+            const congested = checkRouteProximity(junctions, result);
+            setCongestedInPath(congested);
+        }
+
+        // Extract route info from the best route (first route)
+        const bestRoute = result.routes[0];
+        if (bestRoute && bestRoute.legs[0]) {
+            const leg = bestRoute.legs[0];
+            setRouteInfo({
+                distance: leg.distance?.text || 'N/A',
+                duration: leg.duration?.text || 'N/A',
+                congestionCount: checkRouteProximity(junctions, result).length
+            });
         }
     }, [junctions]);
 
-    if (!GOOGLE_MAPS_API_KEY) return <div className="map-error">Missing Google Maps API Key</div>;
+    if (!GOOGLE_MAPS_API_KEY) return <div>Missing API Key</div>;
 
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '15px', background: '#222', color: 'white', display: 'flex', gap: '20px', zIndex: 10 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <span style={{ fontSize: '0.8em', color: '#aaa' }}>From:</span>
+            <div style={{ padding: '15px', background: '#1a1a1a', color: 'white', display: 'flex', gap: '20px', borderBottom: '2px solid #333' }}>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.75em', color: '#888', marginBottom: '4px' }}>From:</div>
                     <LocationAutocomplete
                         value={startQuery}
                         onChange={setStartQuery}
@@ -166,8 +317,8 @@ export default function RoutePlanner() {
                         placeholder="Start Location"
                     />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    <span style={{ fontSize: '0.8em', color: '#aaa' }}>To:</span>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.75em', color: '#888', marginBottom: '4px' }}>To:</div>
                     <LocationAutocomplete
                         value={endQuery}
                         onChange={setEndQuery}
@@ -175,40 +326,188 @@ export default function RoutePlanner() {
                         placeholder="Destination"
                     />
                 </div>
-                <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    Status: <span style={{ color: congestedJunctionsInPath.length > 0 ? '#ff4444' : '#00ff88', fontWeight: 'bold' }}>
-                        {congestedJunctionsInPath.length > 0 ? `Congestion Detected (${congestedJunctionsInPath.length})` : 'Clear'}
-                    </span>
+                <div style={{ minWidth: '200px', textAlign: 'right' }}>
+                    <div style={{ fontSize: '1em', fontWeight: 'bold', marginBottom: '4px' }}>
+                        {congestedInPath.length > 0 ? (
+                            <span style={{ color: '#ff4444' }}>⚠️ Congestion ({congestedInPath.length})</span>
+                        ) : (
+                            <span style={{ color: '#00ff88' }}>✅ Clear</span>
+                        )}
+                    </div>
+                    <div style={{ fontSize: '0.7em', color: '#666' }}>
+                        Updated: {lastUpdate.toLocaleTimeString()}
+                    </div>
                 </div>
             </div>
 
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+                {/* Rerouting Notification */}
+                {isRerouting && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: '#ff4444',
+                        color: 'white',
+                        padding: '12px 24px',
+                        borderRadius: '8px',
+                        fontWeight: 'bold',
+                        zIndex: 1000,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        animation: 'pulse 1s infinite'
+                    }}>
+                        🔄 Congestion Detected! Recalculating Routes...
+                    </div>
+                )}
+
+                {/* Floating Route Info Window */}
+                {routeInfo && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '20px',
+                        right: '20px',
+                        background: 'rgba(26, 26, 26, 0.95)',
+                        backdropFilter: 'blur(10px)',
+                        color: 'white',
+                        padding: '16px 20px',
+                        borderRadius: '12px',
+                        zIndex: 1000,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        minWidth: '220px'
+                    }}>
+                        <div style={{
+                            fontSize: '0.85em',
+                            color: '#888',
+                            marginBottom: '12px',
+                            fontWeight: '600',
+                            letterSpacing: '0.5px'
+                        }}>
+                            📍 ROUTE INFO
+                        </div>
+
+                        <div style={{ marginBottom: '10px' }}>
+                            <div style={{
+                                fontSize: '0.75em',
+                                color: '#666',
+                                marginBottom: '4px'
+                            }}>
+                                Distance
+                            </div>
+                            <div style={{
+                                fontSize: '1.2em',
+                                fontWeight: 'bold',
+                                color: '#00ff88'
+                            }}>
+                                {routeInfo.distance}
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '10px' }}>
+                            <div style={{
+                                fontSize: '0.75em',
+                                color: '#666',
+                                marginBottom: '4px'
+                            }}>
+                                Duration
+                            </div>
+                            <div style={{
+                                fontSize: '1.2em',
+                                fontWeight: 'bold',
+                                color: '#00ff88'
+                            }}>
+                                {routeInfo.duration}
+                            </div>
+                        </div>
+
+                        <div style={{
+                            borderTop: '1px solid rgba(255,255,255,0.1)',
+                            paddingTop: '10px',
+                            marginTop: '10px'
+                        }}>
+                            <div style={{
+                                fontSize: '0.75em',
+                                color: '#666',
+                                marginBottom: '4px'
+                            }}>
+                                Status
+                            </div>
+                            <div style={{
+                                fontSize: '0.9em',
+                                fontWeight: 'bold',
+                                color: routeInfo.congestionCount > 0 ? '#ff4444' : '#00ff88'
+                            }}>
+                                {routeInfo.congestionCount > 0
+                                    ? `⚠️ ${routeInfo.congestionCount} Congested Area${routeInfo.congestionCount > 1 ? 's' : ''}`
+                                    : '✅ Clear Route'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['places', 'routes', 'geometry', 'marker']}>
                     <Map
                         defaultCenter={{ lat: 16.490026, lng: 80.513759 }}
-                        defaultZoom={15}
+                        defaultZoom={14}
                         mapId="ROUTE_PLANNER_MAP"
                         disableDefaultUI={false}
                     >
-                        <Directions start={startPoint} end={endPoint} onRouteChanged={handleRouteChanged} />
+                        <MultiRouteDirections
+                            start={startPoint}
+                            end={endPoint}
+                            onRoutesChanged={handleRoutesChanged}
+                            rerouteKey={rerouteKey}
+                            junctions={junctions}
+                        />
 
-                        {junctions.map(j => (
-                            <AdvancedMarker
-                                key={j.id}
-                                position={{ lat: j.latitude, lng: j.longitude }}
-                                title={j.name}
-                            >
-                                <div className={`custom-marker-pin ${j.status.toLowerCase()} ${j.status === 'active'
-                                    ? ((j as any).vehicle_count > 20 ? 'high' : 'low')
-                                    : ''
-                                    }`}>
-                                    <div className="marker-core" />
-                                    <div className="marker-pulse" />
-                                </div>
-                            </AdvancedMarker>
-                        ))}
+                        {junctions.map(j => {
+                            const isActive = j.status === 'active';
+                            const vehicles = (j as any).vehicle_count || 0;
+                            const trafficClass = isActive ? (vehicles > 20 ? 'high' : 'low') : '';
+
+                            return (
+                                <AdvancedMarker
+                                    key={`${j.id}-${vehicles}-${j.status}`}
+                                    position={{ lat: j.latitude, lng: j.longitude }}
+                                    title={`${j.name}\n${j.status}\n${vehicles} vehicles`}
+                                >
+                                    <div className={`custom-marker-pin ${j.status.toLowerCase()} ${trafficClass}`}>
+                                        <div className="marker-core" />
+                                        <div className="marker-pulse" />
+                                    </div>
+                                </AdvancedMarker>
+                            );
+                        })}
                     </Map>
                 </APIProvider>
+
+                {/* Route Legend */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: '20px',
+                    left: '20px',
+                    background: 'rgba(0,0,0,0.8)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.85em'
+                }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>Route Legend:</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <div style={{ width: '30px', height: '4px', background: '#00ff88' }}></div>
+                        <span>Recommended (Avoids Congestion)</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <div style={{ width: '30px', height: '4px', background: '#ff4444' }}></div>
+                        <span>Has Congestion</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '30px', height: '4px', background: '#888888' }}></div>
+                        <span>Alternative Route</span>
+                    </div>
+                </div>
             </div>
         </div>
     );
