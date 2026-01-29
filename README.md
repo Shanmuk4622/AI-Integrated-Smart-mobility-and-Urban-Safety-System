@@ -12,9 +12,11 @@
 ![Junction Monitor](worker/images/allApplication.jpeg)
 
 ## 📺 Demo Video
-
 [![Demo Video](https://img.youtube.com/vi/XGHO07l-3YY/0.jpg)](https://youtu.be/XGHO07l-3YY)
 
+<p align="left">
+    <iframe width="480" height="270" src="https://www.youtube.com/embed/XGHO07l-3YY" title="Demo Video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</p>
 
 
 This project leverages distributed **Edge AI (Worker Nodes)** to process video feeds at traffic junctions and synchronizes data with a centralized **Cloud Dashboard** for city-wide traffic management.
