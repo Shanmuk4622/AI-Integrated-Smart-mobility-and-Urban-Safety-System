@@ -221,4 +221,3 @@ The worker simulates a camera feed processing unit.
 *   **Detection**: A specialized logic checks for specific vehicle classes (Ambulance/Fire Truck) or color patterns.
 *   **Action**: The system logs the event with high priority, intended to trigger "Green Corridor" signal changes (simulated in logs).
 
----
